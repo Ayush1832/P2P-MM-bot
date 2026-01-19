@@ -1,0 +1,22 @@
+module.exports = {
+  ENTER_QUANTITY: "https://i.ibb.co/0yrbwpwC/x.jpg",
+  ENTER_RATE: "https://i.ibb.co/s9Lx1wcy/x.jpg",
+  PAYMENT_METHOD: "https://i.ibb.co/9mKhC2tf/x.jpg",
+  SELECT_CHAIN: "https://i.ibb.co/Z6bv1ZrF/x.jpg",
+  SELECT_CRYPTO: "https://i.ibb.co/QjTQ6nWq/x.jpg",
+  ENTER_ADDRESS: "https://i.ibb.co/B5z77Ght/x.jpg",
+  SELECT_ROLES: "https://i.ibb.co/MxcbLk1T/x.jpg",
+  DEAL_DISCLAIMER: "https://i.ibb.co/zVBDf2Tt/x.jpg",
+  DEAL_ROOM_CREATED: "https://i.ibb.co/rjkZQ9c/x.jpg",
+  DEAL_CONFIRMED: "https://i.ibb.co/BKTs8PYy/x.jpg",
+  DEPOSIT_ADDRESS: "https://i.ibb.co/JRrhkqYF/x.jpg",
+  DEPOSIT_FOUND: "https://i.ibb.co/GvsV3h7C/x.jpg",
+  TX_LINK: "https://i.ibb.co/vC3L60DJ/x.jpg",
+  CONFIRM_SUMMARY: "https://i.ibb.co/4wYDfBjd/x.jpg",
+  RELEASE_CONFIRMATION: "https://i.ibb.co/QjMF3ndS/x.jpg",
+  DEAL_COMPLETE: "https://i.ibb.co/QjMF3ndS/x.jpg", // Token & Action Images
+  USDT: "https://i.ibb.co/20NXL6hM/x.jpg",
+  USDC: "https://i.ibb.co/rKZsbfzP/x.jpg",
+  refund: "https://i.ibb.co/FLfxSm4x/x.jpg",
+  Release: "https://i.ibb.co/F4BtkrHS/x.jpg",
+};

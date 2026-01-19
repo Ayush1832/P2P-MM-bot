@@ -1,0 +1,42 @@
+{
+  "name": "telegram-escrow-bot",
+  "version": "1.0.0",
+  "description": "Centralized Telegram Escrow Bot for USDT on BSC",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest",
+    "compile": "hardhat compile",
+    "deploy": "hardhat run scripts/deploy-bsc.js --network bsc",
+    "withdraw-usdt-bsc": "node scripts/withdraw-usdt-bsc.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.2",
+    "bip32": "^4.0.0",
+    "bip39": "^3.1.0",
+    "dotenv": "^16.6.1",
+    "ethers": "^6.8.1",
+    "mongoose": "^8.0.3",
+    "node-cron": "^3.0.3",
+    "telegraf": "^4.15.6",
+    "tiny-secp256k1": "^1.1.7",
+    "tronweb": "^5.3.2"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "hardhat": "^2.26.3",
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.2"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "escrow",
+    "crypto",
+    "usdt",
+    "bsc"
+  ],
+  "author": "Ayush",
+  "license": "MIT"
+}
