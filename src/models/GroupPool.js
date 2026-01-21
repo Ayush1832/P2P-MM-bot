@@ -53,9 +53,6 @@ const groupPoolSchema = new mongoose.Schema({
     required: false,
     default: "BSC",
   },
-  // assignedAddresses removed (legacy)
-  // Map of Token Symbol -> Contract Details
-  // e.g. "USDT": { address: "0x...", feePercent: 0.25, network: "BSC" }
   contracts: {
     type: Map,
     of: new mongoose.Schema(

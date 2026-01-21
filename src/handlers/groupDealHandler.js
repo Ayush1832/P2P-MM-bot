@@ -22,12 +22,10 @@ module.exports = async (ctx) => {
       return ctx.reply("❌ This command can only be used inside a group.");
     }
 
-    if (
-      config.ALLOWED_MAIN_GROUP_ID &&
-      String(chatId) !== String(config.ALLOWED_MAIN_GROUP_ID)
-    ) {
+    const allowedGroups = config.getAllowedGroupIds();
+    if (allowedGroups.length > 0 && !allowedGroups.includes(String(chatId))) {
       return ctx.reply(
-        "❌ The /deal command is only available in the official main group."
+        "❌ The /deal command is only available in the official main group.",
       );
     }
 
@@ -35,7 +33,7 @@ module.exports = async (ctx) => {
 
     if (tradeGroupEscrow) {
       return ctx.reply(
-        "❌ This command can only be used in the main group, not in trade groups."
+        "❌ This command can only be used in the main group, not in trade groups.",
       );
     }
 
@@ -56,7 +54,7 @@ module.exports = async (ctx) => {
         if (entity.type === "mention" && !counterpartyHandle) {
           const mention = text.substring(
             entity.offset,
-            entity.offset + entity.length
+            entity.offset + entity.length,
           );
           counterpartyHandle = mention.trim();
         }
@@ -95,7 +93,7 @@ module.exports = async (ctx) => {
       if (!counterpartyUser && chatId < 0) {
         try {
           const administrators = await ctx.telegram.getChatAdministrators(
-            chatId
+            chatId,
           );
           const normalizedHandle = handle.toLowerCase();
 
@@ -133,7 +131,7 @@ module.exports = async (ctx) => {
                 buyerUsername: {
                   $regex: new RegExp(
                     `^${handle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
-                    "i"
+                    "i",
                   ),
                 },
               },
@@ -141,7 +139,7 @@ module.exports = async (ctx) => {
                 sellerUsername: {
                   $regex: new RegExp(
                     `^${handle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
-                    "i"
+                    "i",
                   ),
                 },
               },
@@ -166,7 +164,7 @@ module.exports = async (ctx) => {
               try {
                 const memberInfo = await ctx.telegram.getChatMember(
                   chatId,
-                  userId
+                  userId,
                 );
                 if (memberInfo && memberInfo.user) {
                   counterpartyUser = {
@@ -215,7 +213,7 @@ module.exports = async (ctx) => {
           try {
             await ctx.deleteMessage().catch(() => {});
             const errorMsg = await ctx.reply(
-              "❌ Could not retrieve user info. Please tag the user directly (tap their name) or reply to their message when using /deal."
+              "❌ Could not retrieve user info. Please tag the user directly (tap their name) or reply to their message when using /deal.",
             );
             setTimeout(() => {
               ctx.telegram
@@ -260,7 +258,7 @@ module.exports = async (ctx) => {
       try {
         await ctx.deleteMessage().catch(() => {});
         const errorMsg = await ctx.reply(
-          "❌ Please mention the counterparty (tap their name to tag) or reply to their message when using /deal so we can verify their user ID."
+          "❌ Please mention the counterparty (tap their name to tag) or reply to their message when using /deal so we can verify their user ID.",
         );
         setTimeout(() => {
           ctx.telegram
@@ -309,7 +307,7 @@ module.exports = async (ctx) => {
           } catch (e) {
             console.error(
               `Error checking bio for ${userId} (Attempt ${attempt}/${maxRetries}):`,
-              e.message
+              e.message,
             );
             // Don't retry if user not found (probably invalid ID or deleted account)
             if (
@@ -351,7 +349,7 @@ module.exports = async (ctx) => {
     const counter = await Counter.findByIdAndUpdate(
       { _id: "escrowId" },
       { $inc: { seq: 1 } },
-      { new: true, upsert: true }
+      { new: true, upsert: true },
     );
     const escrowId = `P2PMMX${counter.seq}`;
 
@@ -367,7 +365,7 @@ module.exports = async (ctx) => {
         assignedGroup = await GroupPoolService.assignGroup(
           escrowId,
           ctx.telegram,
-          feePercent // Pass required fee percent
+          feePercent, // Pass required fee percent
         );
 
         // Always enforce join-request approval with a freshly generated link
@@ -375,14 +373,14 @@ module.exports = async (ctx) => {
         // causing us to catch it and retry with a new group
         inviteLink = await GroupPoolService.refreshInviteLink(
           assignedGroup.groupId,
-          ctx.telegram
+          ctx.telegram,
         );
 
         if (!inviteLink) {
           inviteLink = await GroupPoolService.generateInviteLink(
             assignedGroup.groupId,
             ctx.telegram,
-            { creates_join_request: true }
+            { creates_join_request: true },
           );
         }
 
@@ -402,7 +400,7 @@ module.exports = async (ctx) => {
         return ctx.reply(`🚫 ${assignmentError.message}`);
       }
       return ctx.reply(
-        `🚫 No functioning rooms available. Please contact support or try again later.`
+        `🚫 No functioning rooms available. Please contact support or try again later.`,
       );
     }
 
@@ -452,7 +450,7 @@ module.exports = async (ctx) => {
 
     const participantsText = `<b>👥 Participants:</b>\n• ${formatParticipantWithRole(
       participants[0],
-      "Initiator"
+      "Initiator",
     )}\n• ${formatParticipantWithRole(participants[1], "Counterparty")}`;
     const noteText =
       "Note: Only the mentioned members can join. Never join any link shared via DM.";
@@ -463,7 +461,7 @@ module.exports = async (ctx) => {
         caption: message,
         parse_mode: "HTML",
         protect_content: true,
-      })
+      }),
     );
     try {
       newEscrow.originInviteMessageId = inviteMsg.message_id;
@@ -508,10 +506,10 @@ module.exports = async (ctx) => {
           try {
             const memberInfo = await telegram.getChatMember(
               String(currentEscrow.groupId),
-              Number(currentEscrow.creatorId)
+              Number(currentEscrow.creatorId),
             );
             initiatorPresent = ["member", "administrator", "creator"].includes(
-              memberInfo.status
+              memberInfo.status,
             );
           } catch (_) {
             initiatorPresent = false;
@@ -519,7 +517,7 @@ module.exports = async (ctx) => {
         }
 
         const creatorAlreadyCounted = currentEscrow.approvedUserIds?.includes(
-          Number(currentEscrow.creatorId)
+          Number(currentEscrow.creatorId),
         );
         const totalJoined =
           approvedCount + (initiatorPresent && !creatorAlreadyCounted ? 1 : 0);
@@ -535,7 +533,7 @@ module.exports = async (ctx) => {
           try {
             await telegram.deleteMessage(
               currentEscrow.originChatId,
-              currentEscrow.originInviteMessageId
+              currentEscrow.originInviteMessageId,
             );
           } catch (_) {}
         }
@@ -544,28 +542,28 @@ module.exports = async (ctx) => {
           currentEscrow,
           0,
           "initiator",
-          { html: true }
+          { html: true },
         );
         const counterpartyName = formatParticipantByIndex(
           currentEscrow,
           1,
           "counterparty",
-          { html: true }
+          { html: true },
         );
         try {
           const cancellationMsg = await withRetry(() =>
             telegram.sendMessage(
               currentEscrow.originChatId,
               `❌ Deal cancelled between ${initiatorName} and ${counterpartyName} due to inactivity. Both parties must join within 5 minutes.`,
-              { parse_mode: "HTML" }
-            )
+              { parse_mode: "HTML" },
+            ),
           );
 
           setTimeout(async () => {
             try {
               await telegram.deleteMessage(
                 currentEscrow.originChatId,
-                cancellationMsg.message_id
+                cancellationMsg.message_id,
               );
             } catch (_) {}
           }, 5 * 60 * 1000);
@@ -586,7 +584,7 @@ module.exports = async (ctx) => {
             try {
               await telegram.deleteMessage(
                 String(currentEscrow.groupId),
-                currentEscrow.waitingForUserMessageId
+                currentEscrow.waitingForUserMessageId,
               );
             } catch (_) {}
           }
@@ -600,12 +598,12 @@ module.exports = async (ctx) => {
             await GroupPoolService.removeUsersFromGroup(
               currentEscrow,
               group.groupId,
-              telegram
+              telegram,
             );
           } catch (removeError) {
             console.log(
               "Could not remove users during timeout cancellation:",
-              removeError.message
+              removeError.message,
             );
           }
 
@@ -614,7 +612,7 @@ module.exports = async (ctx) => {
           } catch (linkError) {
             console.log(
               "Could not refresh invite link during timeout cancellation:",
-              linkError.message
+              linkError.message,
             );
           }
 
@@ -625,7 +623,7 @@ module.exports = async (ctx) => {
           await group.save();
         } else {
           console.log(
-            `Warning: Could not find group pool entry for escrow ${currentEscrow.escrowId} during timeout cancellation`
+            `Warning: Could not find group pool entry for escrow ${currentEscrow.escrowId} during timeout cancellation`,
           );
         }
 
@@ -635,7 +633,7 @@ module.exports = async (ctx) => {
         } catch (deleteError) {
           console.log(
             "Could not delete escrow during timeout cancellation:",
-            deleteError.message
+            deleteError.message,
           );
         }
       } catch (error) {

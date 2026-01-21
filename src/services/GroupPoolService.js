@@ -39,7 +39,7 @@ class GroupPoolService {
         {
           $set: updateData,
         },
-        { new: true, sort: { createdAt: 1 } }
+        { new: true, sort: { createdAt: 1 } },
       );
 
       if (!updatedGroup) {
@@ -60,7 +60,7 @@ class GroupPoolService {
         // Removed specific fee error since we don't filter by fee anymore
 
         throw new Error(
-          "No available groups in pool. All groups are currently occupied."
+          "No available groups in pool. All groups are currently occupied.",
         );
       }
 
@@ -88,7 +88,7 @@ class GroupPoolService {
     try {
       if (!telegram) {
         throw new Error(
-          "Telegram API instance is required for generating invite links"
+          "Telegram API instance is required for generating invite links",
         );
       }
 
@@ -119,7 +119,7 @@ class GroupPoolService {
             return group.inviteLink;
           } catch (verifyError) {
             console.log(
-              `Chat verification failed for ${groupId}: ${verifyError.message}`
+              `Chat verification failed for ${groupId}: ${verifyError.message}`,
             );
             try {
               if (group.inviteLink) {
@@ -193,12 +193,12 @@ class GroupPoolService {
             }
             inviteLinkData = await telegram.createChatInviteLink(
               migrateId,
-              retryParams
+              retryParams,
             );
           } catch (retryErr) {
             console.error(
               "Error generating invite link after migration retry:",
-              retryErr
+              retryErr,
             );
             throw retryErr;
           }
@@ -265,7 +265,7 @@ class GroupPoolService {
           assignedAt: null,
           completedAt: null,
           inviteLink: null,
-        }
+        },
       );
 
       return result.modifiedCount;
@@ -304,6 +304,12 @@ class GroupPoolService {
     try {
       const existingGroup = await GroupPool.findOne({ groupId });
       if (existingGroup) {
+        // Update title if provided and missing/changed
+        if (groupTitle && existingGroup.groupTitle !== groupTitle) {
+          existingGroup.groupTitle = groupTitle;
+          await existingGroup.save();
+        }
+
         if (telegram) {
           await this.ensureAdminInGroup(groupId, telegram);
 
@@ -366,13 +372,13 @@ class GroupPoolService {
       try {
         const chatAdministrators = await telegram.getChatAdministrators(chatId);
         const adminIds = chatAdministrators.map((member) =>
-          Number(member.user.id)
+          Number(member.user.id),
         );
         let adminIsMember = false;
         try {
           const memberInfo = await telegram.getChatMember(chatId, adminUserId2);
           adminIsMember = ["member", "administrator", "creator"].includes(
-            memberInfo.status
+            memberInfo.status,
           );
         } catch (memberError) {
           adminIsMember = false;
@@ -380,7 +386,7 @@ class GroupPoolService {
 
         if (!adminIds.includes(adminUserId2) && !adminIsMember) {
           console.warn(
-            `⚠️ WARNING: ADMIN_USER_ID2 (${adminUserId2}) is not present in group ${groupId}. Admin should be manually added to the group before adding it to the pool.`
+            `⚠️ WARNING: ADMIN_USER_ID2 (${adminUserId2}) is not present in group ${groupId}. Admin should be manually added to the group before adding it to the pool.`,
           );
         }
       } catch (error) {
@@ -509,7 +515,7 @@ class GroupPoolService {
           completedAt: null,
           inviteLink: null,
           feePercent: null,
-        }
+        },
       );
 
       return result.modifiedCount;
@@ -531,7 +537,7 @@ class GroupPoolService {
           assignedEscrowId: null,
           assignedAt: null,
           inviteLink: null,
-        }
+        },
       );
 
       return result.modifiedCount;
@@ -627,7 +633,7 @@ class GroupPoolService {
         const allUsersRemoved = await this.removeUsersFromGroup(
           escrow,
           group.groupId,
-          telegram
+          telegram,
         );
 
         if (allUsersRemoved) {
@@ -754,7 +760,7 @@ class GroupPoolService {
       try {
         const chatAdministrators = await telegram.getChatAdministrators(chatId);
         adminMembers = chatAdministrators.map((member) =>
-          Number(member.user.id)
+          Number(member.user.id),
         );
       } catch (error) {
         console.error("Error getting chat administrators:", error);
@@ -878,7 +884,7 @@ class GroupPoolService {
           await telegram.revokeChatInviteLink(chatId, group.inviteLink);
         } catch (revokeError) {
           console.log(
-            `Could not revoke old invite link for ${groupId}: ${revokeError.message}`
+            `Could not revoke old invite link for ${groupId}: ${revokeError.message}`,
           );
         }
         group.inviteLink = null;
@@ -1021,7 +1027,7 @@ class GroupPoolService {
 
             if (msgId > batchEnd) {
               await new Promise((resolve) =>
-                setTimeout(resolve, DELAY_BETWEEN_MESSAGES)
+                setTimeout(resolve, DELAY_BETWEEN_MESSAGES),
               );
             }
           } catch (deleteError) {
@@ -1047,7 +1053,7 @@ class GroupPoolService {
 
         if (batchStart > batchEnd) {
           await new Promise((resolve) =>
-            setTimeout(resolve, DELAY_BETWEEN_BATCHES)
+            setTimeout(resolve, DELAY_BETWEEN_BATCHES),
           );
         }
       }

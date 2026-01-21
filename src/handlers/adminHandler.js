@@ -181,12 +181,29 @@ async function adminPoolAdd(ctx) {
         "❌ Please provide group ID.\nUsage: `/admin_pool_add <groupId>`",
         {
           parse_mode: "Markdown",
-        }
+        },
       );
     }
 
-    await GroupPoolService.addGroup(groupId, null, ctx.telegram);
-    await ctx.reply(`✅ Added group ${groupId} to pool.`);
+    let groupTitle = null;
+
+    try {
+      const chatInfo = await ctx.telegram.getChat(groupId);
+      if (chatInfo && chatInfo.title) {
+        groupTitle = chatInfo.title;
+      }
+    } catch (e) {
+      console.warn(`Could not fetch group title for ${groupId}:`, e.message);
+      // Fallback: Continue without title or use "Unknown" if desired,
+      // but null allows addGroup to handle it or leave as is.
+    }
+
+    await GroupPoolService.addGroup(groupId, groupTitle, ctx.telegram);
+    await ctx.reply(
+      `✅ Added group ${groupId} to pool.\nFetched Title: ${
+        groupTitle || "Unknown (Could not fetch)"
+      }`,
+    );
   } catch (error) {
     console.error("Error adding group to pool:", error);
     await ctx.reply(`❌ Error adding group: ${error.message}`);
@@ -196,11 +213,11 @@ async function adminPoolAdd(ctx) {
 async function adminPoolList(ctx) {
   try {
     const availableGroups = await GroupPoolService.getGroupsByStatus(
-      "available"
+      "available",
     );
     const assignedGroups = await GroupPoolService.getGroupsByStatus("assigned");
     const completedGroups = await GroupPoolService.getGroupsByStatus(
-      "completed"
+      "completed",
     );
 
     let message = "🏊‍♂️ <b>GROUP POOL LIST</b>\n\n";
@@ -269,13 +286,13 @@ async function adminWarnInactive(ctx) {
     for (const tracking of candidates) {
       attempted++;
       const ok = await ActivityMonitoringService.sendInactivityWarning(
-        tracking
+        tracking,
       );
       if (ok) success++;
     }
 
     await ctx.reply(
-      `⚠️ Attempted: ${attempted}, Successfully warned: ${success}.`
+      `⚠️ Attempted: ${attempted}, Successfully warned: ${success}.`,
     );
   } catch (error) {
     console.error("Error in adminWarnInactive:", error);
@@ -324,7 +341,7 @@ async function adminAddressPool(ctx) {
 
     if (!stats.singleAddress) {
       return ctx.reply(
-        "📊 No deposit address configured. Please set HOT_WALLET_PRIVATE_KEY in config."
+        "📊 No deposit address configured. Please set HOT_WALLET_PRIVATE_KEY in config.",
       );
     }
 
@@ -360,7 +377,7 @@ async function adminInitAddresses(ctx) {
         `❌ No EscrowVault contracts found in database.\n\n` +
           `⚠️ Please deploy contracts using:\n` +
           `\`npm run deploy\`\n\n` +
-          `This will deploy USDT and USDC contracts on BSC with ${desiredFeePercent}% fee.`
+          `This will deploy USDT and USDC contracts on BSC with ${desiredFeePercent}% fee.`,
       );
     }
 
@@ -393,19 +410,19 @@ async function adminInitAddresses(ctx) {
     }
 
     const missingTokens = requiredTokens.filter(
-      (token) => !bscTokens.includes(token)
+      (token) => !bscTokens.includes(token),
     );
     if (missingTokens.length > 0) {
       message += `\n⚠️ **Missing Tokens:** ${missingTokens.join(", ")}\n`;
       message += `Please deploy missing contracts.\n`;
     } else {
       message += `\n✅ All required tokens (${requiredTokens.join(
-        ", "
+        ", ",
       )}) are deployed.\n`;
     }
 
     const otherNetworks = Object.keys(contractsByNetwork).filter(
-      (n) => n !== "BSC"
+      (n) => n !== "BSC",
     );
     if (otherNetworks.length > 0) {
       message += `\n📡 **Other Networks:**\n`;
@@ -433,7 +450,7 @@ async function adminCleanupAddresses(ctx) {
     await ctx.reply("🧹 Cleaning up abandoned addresses...");
 
     await ctx.reply(
-      "ℹ️ Address cleanup is no longer needed. Addresses are managed via EscrowVault contracts."
+      "ℹ️ Address cleanup is no longer needed. Addresses are managed via EscrowVault contracts.",
     );
   } catch (error) {
     console.error("Error cleaning up addresses:", error);
@@ -497,7 +514,7 @@ async function adminWithdrawNetworkFees(ctx) {
         skippedCount++;
         message += `• [${contract.network}] ${contract.address.slice(
           0,
-          6
+          6,
         )}: ⚠️ Skipped (No Fee Wallet Configured)\n`;
         continue;
       }
@@ -508,19 +525,19 @@ async function adminWithdrawNetworkFees(ctx) {
           contract.token,
           contract.network,
           contract.address,
-          targetWallet
+          targetWallet,
         );
         sweptCount++;
         message += `• [${contract.network}] ${contract.address.slice(
           0,
-          6
+          6,
         )}: ✅ Swept\n`;
       } catch (err) {
         errorCount++;
         console.error(`Failed to sweep ${contract.address}:`, err.message);
         message += `• [${contract.network}] ${contract.address.slice(
           0,
-          6
+          6,
         )}: ❌ Error\n`;
       }
     }
@@ -567,7 +584,7 @@ async function adminPoolDelete(ctx) {
         "❌ Please provide group ID.\nUsage: `/admin_pool_delete <groupId>`",
         {
           parse_mode: "Markdown",
-        }
+        },
       );
     }
 
@@ -736,7 +753,7 @@ async function adminTradeStats(ctx) {
 
     for (const [feePercent, contractList] of Object.entries(contractsByFee)) {
       const contractAddresses = contractList.map((c) =>
-        c.address.toLowerCase()
+        c.address.toLowerCase(),
       );
 
       const escrowsWithFee = validCompletedEscrows.filter((escrow) => {
@@ -779,10 +796,10 @@ async function adminTradeStats(ctx) {
     }, 0);
 
     const completedCount = validCompletedEscrows.filter(
-      (e) => e.status === "completed"
+      (e) => e.status === "completed",
     ).length;
     const refundedCount = validCompletedEscrows.filter(
-      (e) => e.status === "refunded"
+      (e) => e.status === "refunded",
     ).length;
 
     let statsMessage = `📊 **COMPREHENSIVE TRADE STATISTICS**
@@ -801,7 +818,7 @@ async function adminTradeStats(ctx) {
 📈 **BY FEE PERCENTAGE:**`;
 
     const sortedFees = Object.keys(statsByFee).sort(
-      (a, b) => parseFloat(a) - parseFloat(b)
+      (a, b) => parseFloat(a) - parseFloat(b),
     );
 
     for (const feePercent of sortedFees) {
@@ -819,7 +836,7 @@ async function adminTradeStats(ctx) {
         statsMessage += `\n• **Token Breakdown:**`;
         Object.entries(stats.tokenBreakdown).forEach(([token, data]) => {
           statsMessage += `\n  - ${token}: ${data.count} trades, ${formatNumber(
-            data.amount
+            data.amount,
           )} tokens`;
         });
       }
@@ -961,7 +978,7 @@ async function adminExportTrades(ctx) {
         caption: `📊 **TRADE EXPORT COMPLETE**\n\n📈 **Statistics:**\n• Total Trades: ${
           allEscrows.length
         }\n• File: ${filename}\n• Generated: ${new Date().toLocaleString()}\n• Location: ${filePath}\n\n💡 **Usage:**\n• Open in Excel, Google Sheets, or any CSV viewer\n• Sort and filter by any column\n• Analyze trading patterns and performance\n• File saved permanently for your records`,
-      }
+      },
     );
   } catch (error) {
     console.error("Error in admin export trades:", error);
@@ -983,7 +1000,7 @@ async function adminRecentTrades(ctx) {
 
     if (limit > 50) {
       return ctx.reply(
-        "❌ Maximum 50 trades per request. Use /admin_export_trades for complete data."
+        "❌ Maximum 50 trades per request. Use /admin_export_trades for complete data.",
       );
     }
 
@@ -1162,7 +1179,7 @@ async function adminGroupReset(ctx) {
 
       if (hasDeposit) {
         const errorMsg = await ctx.reply(
-          "❌ Cannot reset: Deposits were made. Use /release or /refund to settle."
+          "❌ Cannot reset: Deposits were made. Use /release or /refund to settle.",
         );
         setTimeout(async () => {
           try {
@@ -1210,7 +1227,7 @@ async function adminGroupReset(ctx) {
         try {
           await ctx.telegram.unpinChatMessage(
             chatId,
-            escrow.dealConfirmedMessageId
+            escrow.dealConfirmedMessageId,
           );
         } catch (unpinError) {
           // Ignore errors (message may already be unpinned or deleted)
@@ -1221,14 +1238,14 @@ async function adminGroupReset(ctx) {
       const allUsersRemoved = await GroupPoolService.removeUsersFromGroup(
         escrow,
         group.groupId,
-        ctx.telegram
+        ctx.telegram,
       );
 
       // For completed trades, continue even if some users can't be removed
       // For active trades, be more strict
       if (!allUsersRemoved && !isCompleted) {
         const errorMsg = await ctx.reply(
-          "⚠️ Some users could not be removed from the group. Please check manually."
+          "⚠️ Some users could not be removed from the group. Please check manually.",
         );
         // Delete error message after 1 minute
         setTimeout(async () => {
@@ -1267,7 +1284,7 @@ async function adminGroupReset(ctx) {
       }
 
       const successMsg = await ctx.reply(
-        "✅ Group reset successfully. Ready for new deals."
+        "✅ Group reset successfully. Ready for new deals.",
       );
       // Delete success message after 1 minute
       setTimeout(async () => {
@@ -1278,7 +1295,7 @@ async function adminGroupReset(ctx) {
     } catch (error) {
       console.error("Error resetting group:", error);
       const errorMsg = await ctx.reply(
-        "❌ Error resetting group. Please check the logs."
+        "❌ Error resetting group. Please check the logs.",
       );
       // Delete error message after 1 minute
       setTimeout(async () => {
@@ -1392,7 +1409,7 @@ async function adminResetForce(ctx) {
         try {
           await ctx.telegram.unpinChatMessage(
             chatId,
-            escrow.dealConfirmedMessageId
+            escrow.dealConfirmedMessageId,
           );
         } catch (unpinError) {
           // Ignore errors (message may already be unpinned or deleted)
@@ -1403,7 +1420,7 @@ async function adminResetForce(ctx) {
       const allUsersRemoved = await GroupPoolService.removeUsersFromGroup(
         escrow,
         group.groupId,
-        ctx.telegram
+        ctx.telegram,
       );
 
       if (!allUsersRemoved) {
@@ -1432,7 +1449,7 @@ async function adminResetForce(ctx) {
       }
 
       const successMsg = await ctx.reply(
-        "✅ Group force reset successfully. Ready for new deals."
+        "✅ Group force reset successfully. Ready for new deals.",
       );
       // Delete success message after 1 minute
       setTimeout(async () => {
@@ -1443,7 +1460,7 @@ async function adminResetForce(ctx) {
     } catch (error) {
       console.error("Error force resetting group:", error);
       const errorMsg = await ctx.reply(
-        "❌ Error force resetting group. Please check the logs."
+        "❌ Error force resetting group. Please check the logs.",
       );
       // Delete error message after 1 minute
       setTimeout(async () => {
@@ -1475,7 +1492,7 @@ async function adminResetAllGroups(ctx) {
     }
 
     const processingMsg = await ctx.reply(
-      "🔄 Resetting all groups... This may take a while."
+      "🔄 Resetting all groups... This may take a while.",
     );
 
     // Store telegram instance and message info for background processing
@@ -1505,7 +1522,7 @@ async function adminResetAllGroups(ctx) {
             chatId,
             messageId,
             null,
-            "❌ No groups found in pool."
+            "❌ No groups found in pool.",
           );
           setTimeout(async () => {
             try {
@@ -1527,7 +1544,7 @@ async function adminResetAllGroups(ctx) {
               chatId,
               messageId,
               null,
-              progressText
+              progressText,
             );
           } catch (e) {
             // Ignore edit errors - message might be deleted or edited too frequently
@@ -1579,7 +1596,7 @@ async function adminResetAllGroups(ctx) {
                   await GroupPoolService.removeUsersFromGroup(
                     escrow,
                     groupId,
-                    telegram
+                    telegram,
                   );
                 } catch (removeError) {
                   // Continue even if user removal fails
@@ -1617,7 +1634,7 @@ async function adminResetAllGroups(ctx) {
                     const chatAdministrators =
                       await telegram.getChatAdministrators(chatIdStr);
                     adminMembers = chatAdministrators.map((member) =>
-                      Number(member.user.id)
+                      Number(member.user.id),
                     );
                   } catch (e) {
                     // Continue with empty list - group might not have admins or bot lacks permission
@@ -1636,7 +1653,7 @@ async function adminResetAllGroups(ctx) {
                       await telegram.kickChatMember(
                         chatIdStr,
                         userId,
-                        untilDate
+                        untilDate,
                       );
                       // Immediately unban so they can rejoin
                       await telegram.unbanChatMember(chatIdStr, userId);
@@ -1689,7 +1706,7 @@ async function adminResetAllGroups(ctx) {
               } catch (saveError) {
                 console.error(
                   `⚠️ Could not save group ${groupId}:`,
-                  saveError.message
+                  saveError.message,
                 );
                 // Continue - try to reset next group
               }
@@ -1738,7 +1755,7 @@ All groups have been reset to 'available' status.`;
             chatId,
             messageId,
             null,
-            `❌ Error resetting groups: ${error.message}`
+            `❌ Error resetting groups: ${error.message}`,
           );
           setTimeout(async () => {
             try {
@@ -1768,7 +1785,7 @@ async function adminWithdrawExcess(ctx) {
 
     if (chatId <= 0) {
       return ctx.reply(
-        "❌ This command can only be used in a private chat with the bot."
+        "❌ This command can only be used in a private chat with the bot.",
       );
     }
 
@@ -1839,7 +1856,7 @@ async function requestWithdrawConfirmation(ctx) {
 
     if (!adminWallet) {
       return ctx.reply(
-        "❌ FEE_WALLET_BSC is not set in environment variables."
+        "❌ FEE_WALLET_BSC is not set in environment variables.",
       );
     }
 
@@ -1912,12 +1929,12 @@ async function executeWithdrawExcess(ctx) {
     const chatId = ctx.chat?.id || ctx.callbackQuery?.message?.chat?.id;
     if (!chatId || chatId <= 0) {
       throw new Error(
-        "Invalid chat context - command must be used in private chat"
+        "Invalid chat context - command must be used in private chat",
       );
     }
 
     const processingMsg = await ctx.reply(
-      "🔄 Processing withdrawal... This may take a few minutes."
+      "🔄 Processing withdrawal... This may take a few minutes.",
     );
 
     const mongoose = require("mongoose");
@@ -1960,7 +1977,7 @@ async function executeWithdrawExcess(ctx) {
           chatId,
           processingMsg.message_id,
           null,
-          "❌ No USDT EscrowVault contracts found."
+          "❌ No USDT EscrowVault contracts found.",
         );
       } catch (editError) {
         // Fallback to reply if edit fails
@@ -1973,7 +1990,7 @@ async function executeWithdrawExcess(ctx) {
     const tokenContract = new ethers.Contract(
       tokenAddress,
       ERC20_ABI,
-      provider
+      provider,
     );
     const tokenWithSigner = tokenContract.connect(wallet);
     const decimals = await tokenContract.decimals();
@@ -1991,7 +2008,7 @@ async function executeWithdrawExcess(ctx) {
       const vaultContract = new ethers.Contract(
         contractAddress,
         ESCROW_VAULT_ABI,
-        wallet
+        wallet,
       );
       const owner = await vaultContract.owner();
       if (owner.toLowerCase() !== wallet.address.toLowerCase()) {
@@ -2018,19 +2035,19 @@ async function executeWithdrawExcess(ctx) {
       try {
         const withdrawTx = await vaultContract.withdrawToken(
           tokenAddress,
-          wallet.address
+          wallet.address,
         );
         await withdrawTx.wait();
 
         const transferTx = await tokenWithSigner.transfer(
           FEE_WALLET_BSC,
-          excessRaw
+          excessRaw,
         );
         await transferTx.wait();
 
         const depositTx = await tokenWithSigner.transfer(
           contractAddress,
-          reserveWei
+          reserveWei,
         );
         await depositTx.wait();
 
@@ -2065,7 +2082,7 @@ All excess funds have been withdrawn successfully.`;
         processingMsg.message_id,
         null,
         summary,
-        { parse_mode: "Markdown" }
+        { parse_mode: "Markdown" },
       );
     } catch (editError) {
       // Fallback to reply if edit fails (message might have been deleted)
@@ -2178,7 +2195,7 @@ function setupAdminActions(bot) {
       await ctx.answerCbQuery("Processing withdrawal...");
       await ctx.editMessageText(
         `⏳ Withdrawing fees for ${token} on ${network}...`,
-        { parse_mode: "HTML" }
+        { parse_mode: "HTML" },
       );
 
       const blockchainService = new BlockchainService();
@@ -2238,7 +2255,7 @@ async function adminWithdrawAllBsc(ctx) {
   if (!isAdmin(ctx)) return;
   // Run in background to avoid timeout
   handleWithdrawAll(ctx, "BSC").catch((err) =>
-    console.error("Background BSC withdraw error:", err)
+    console.error("Background BSC withdraw error:", err),
   );
 }
 
@@ -2246,7 +2263,7 @@ async function adminWithdrawAllTron(ctx) {
   if (!isAdmin(ctx)) return;
   // Run in background to avoid timeout
   handleWithdrawAll(ctx, "TRON").catch((err) =>
-    console.error("Background TRON withdraw error:", err)
+    console.error("Background TRON withdraw error:", err),
   );
 }
 
@@ -2256,7 +2273,7 @@ async function adminWithdrawAllTron(ctx) {
 async function handleWithdrawAll(ctx, network) {
   try {
     const statusMsg = await ctx.reply(
-      `🔍 Scanning ${network} contracts for fees...`
+      `🔍 Scanning ${network} contracts for fees...`,
     );
 
     const contracts = await Contract.find({
@@ -2282,12 +2299,12 @@ async function handleWithdrawAll(ctx, network) {
         const feeResult = await bs.withdrawFees(
           contract.token,
           network,
-          contract.address
+          contract.address,
         );
 
         if (feeResult.success && feeResult.amount) {
           const amt = parseFloat(
-            ethers.formatUnits(feeResult.amount, decimals)
+            ethers.formatUnits(feeResult.amount, decimals),
           );
           totalFeeTokens[contract.token] =
             (totalFeeTokens[contract.token] || 0) + amt;
@@ -2308,7 +2325,7 @@ async function handleWithdrawAll(ctx, network) {
           const contractBalance = await bs.getTokenBalance(
             contract.token,
             network,
-            contract.address
+            contract.address,
           );
 
           if (contractBalance > 0) {
@@ -2316,7 +2333,7 @@ async function handleWithdrawAll(ctx, network) {
               contract.token,
               network,
               contract.address,
-              targetWallet
+              targetWallet,
             );
 
             if (result.success) {
@@ -2375,7 +2392,7 @@ async function handleWithdrawAll(ctx, network) {
       statusMsg.message_id,
       null,
       report,
-      { parse_mode: "HTML", disable_web_page_preview: true }
+      { parse_mode: "HTML", disable_web_page_preview: true },
     );
   } catch (error) {
     console.error("Error in withdraw all:", error);

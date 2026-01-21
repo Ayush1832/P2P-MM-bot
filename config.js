@@ -23,13 +23,13 @@ module.exports = {
   // Token Contract Addresses
   USDT_SEPOLIA: process.env.USDT_SEPOLIA,
   USDT_BSC: process.env.USDT_BSC,
-  USDT_SOL: process.env.USDT_SOL,
+
   USDT_TRON: process.env.USDT_TRON,
   USDC_BSC: process.env.USDC_BSC,
-  USDC_SOL: process.env.USDC_SOL,
+
   BUSD_BSC: process.env.BUSD_BSC,
   ETH_ETH: process.env.ETH_ETH,
-  BTC_BTC: process.env.BTC_BTC,
+
   BTC_BSC: process.env.BTC_BSC,
   TRX_TRON: process.env.TRX_TRON,
   SOL_SOL: process.env.SOL_SOL,
@@ -41,7 +41,6 @@ module.exports = {
   // Network RPC URLs
   SEPOLIA_RPC_URL: process.env.SEPOLIA_RPC_URL,
   ETH_RPC_URL: process.env.ETH_RPC_URL,
-  LTC_RPC_URL: process.env.LTC_RPC_URL,
   TRON_RPC_URL:
     process.env.TRON_RPC_URL ||
     "https://icy-holy-snow.tron-mainnet.quiknode.pro/9236e8e0de17867c93a9db58840aed12a689f94e/jsonrpc",
@@ -70,6 +69,17 @@ module.exports = {
 
   // Group Restriction
   ALLOWED_MAIN_GROUP_ID: process.env.ALLOWED_MAIN_GROUP_ID || "-1002457247089",
+  ALLOWED_MAIN_GROUP_ID2: process.env.ALLOWED_MAIN_GROUP_ID2,
+
+  // Helper function to get all allowed group IDs
+  getAllowedGroupIds() {
+    const groupIds = [];
+    if (this.ALLOWED_MAIN_GROUP_ID)
+      groupIds.push(String(this.ALLOWED_MAIN_GROUP_ID));
+    if (this.ALLOWED_MAIN_GROUP_ID2)
+      groupIds.push(String(this.ALLOWED_MAIN_GROUP_ID2));
+    return groupIds;
+  },
 
   // Helper function to get all admin IDs
   getAllAdminIds() {

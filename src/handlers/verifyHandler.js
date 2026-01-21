@@ -12,12 +12,10 @@ module.exports = async (ctx) => {
       return ctx.reply("❌ This command can only be used in a group chat.");
     }
 
-    if (
-      config.ALLOWED_MAIN_GROUP_ID &&
-      String(chatId) !== String(config.ALLOWED_MAIN_GROUP_ID)
-    ) {
+    const allowedGroups = config.getAllowedGroupIds();
+    if (allowedGroups.length > 0 && !allowedGroups.includes(String(chatId))) {
       return ctx.reply(
-        "❌ This command is only available in the official main group."
+        "❌ This command is only available in the official main group.",
       );
     }
 
@@ -27,14 +25,14 @@ module.exports = async (ctx) => {
 
     if (tradeGroupEscrow) {
       return ctx.reply(
-        "❌ This command can only be used in the main group, not in trade groups."
+        "❌ This command can only be used in the main group, not in trade groups.",
       );
     }
 
     const parts = text.split(/\s+/);
     if (parts.length < 2) {
       return ctx.reply(
-        "❌ Usage: /verify <address>\n\nExamples:\n• /verify 0x4dd9c84aD4201d4aDF67eE20508BF622125C515c (EVM)\n• /verify TQn9Y2khEsLMWT4K3LdL8oKbh1Z2HtZqjP (TRON)"
+        "❌ Usage: /verify <address>\n\nExamples:\n• /verify 0x4dd9c84aD4201d4aDF67eE20508BF622125C515c (EVM)\n• /verify TQn9Y2khEsLMWT4K3LdL8oKbh1Z2HtZqjP (TRON)",
       );
     }
 
@@ -60,14 +58,14 @@ module.exports = async (ctx) => {
 
     if (!isEVM && !isTRON) {
       return ctx.reply(
-        "❌ Invalid address format. Please provide:\n• EVM address: 0x followed by 40 hex characters\n• TRON address: T followed by 33 base58 characters"
+        "❌ Invalid address format. Please provide:\n• EVM address: 0x followed by 40 hex characters\n• TRON address: T followed by 33 base58 characters",
       );
     }
 
     const chainType = isTRON ? "TRON" : "BSC";
     if (!isValidAddress(address, chainType)) {
       return ctx.reply(
-        "❌ Invalid address format. Please provide a valid address."
+        "❌ Invalid address format. Please provide a valid address.",
       );
     }
 
@@ -97,7 +95,7 @@ module.exports = async (ctx) => {
           `✅ Address verified\n\n` +
             `Token: ${contract.token}\n` +
             `Chain: ${contract.network}`,
-          { parse_mode: "HTML" }
+          { parse_mode: "HTML" },
         );
 
         const telegram = ctx.telegram;
@@ -119,7 +117,7 @@ module.exports = async (ctx) => {
         `⚠️ <b>WARNING: Address Not Verified</b>\n\n` +
           `❌ This address does <b>NOT</b> belong to this bot.\n\n` +
           `🚫 <b>DO NOT send funds to this address!</b>\n\n`,
-        { parse_mode: "HTML" }
+        { parse_mode: "HTML" },
       );
 
       const telegram = ctx.telegram;
@@ -143,7 +141,7 @@ module.exports = async (ctx) => {
 
     const replyMsg = await ctx.reply(
       `✅ Address verified\n\n` + `Token: ${token}\n` + `Chain: ${chain}`,
-      { parse_mode: "HTML" }
+      { parse_mode: "HTML" },
     );
 
     const telegram = ctx.telegram;
@@ -160,7 +158,7 @@ module.exports = async (ctx) => {
   } catch (error) {
     console.error("Error in verify handler:", error);
     ctx.reply(
-      "❌ An error occurred while verifying the address. Please try again."
+      "❌ An error occurred while verifying the address. Please try again.",
     );
   }
 };
