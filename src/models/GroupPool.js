@@ -39,29 +39,18 @@ const groupPoolSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
-  // Linked contract details
-  contractAddress: {
-    type: String,
-    required: false,
-  },
   feePercent: {
     type: Number,
     required: false,
-  },
-  network: {
-    type: String,
-    required: false,
-    default: "BSC",
   },
   contracts: {
     type: Map,
     of: new mongoose.Schema(
       {
         address: { type: String, required: true },
-        feePercent: { type: Number, required: true },
         network: { type: String, required: true, default: "BSC" },
       },
-      { _id: false }
+      { _id: false },
     ),
     default: {},
   },

@@ -58,6 +58,7 @@
 
 `/withdraw_all_bsc` - Withdraw all fees & surplus (BSC)
 `/withdraw_all_tron` - Withdraw all fees & surplus (TRON)
+`/withdraw_room_X` - Withdraw all funds from MM Room X (e.g., `/withdraw_room_10`)
 `/admin_help` - Show this list
 
 ---

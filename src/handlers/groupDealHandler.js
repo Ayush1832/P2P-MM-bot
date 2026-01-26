@@ -287,8 +287,7 @@ module.exports = async (ctx) => {
       return ctx.reply("❌ You cannot start a deal with yourself.");
     }
 
-    // Check user bios for "@room" to determine fee
-    let feePercent = 0.75;
+    // Check user bios for "@room" to determine room tier
     let initiatorHasTag = false;
     let counterpartyHasTag = false;
 
@@ -331,11 +330,19 @@ module.exports = async (ctx) => {
         ? await checkBio(counterpartyId)
         : false;
 
-      // Use feeConfig to determine service fee based on bio tags
-      feePercent = feeConfig.getServiceFee(initiatorHasTag, counterpartyHasTag);
+      // Determine tier based on bio results (fee is pre-set in DB, not calculated here)
+      // feePercent will be read from the assigned group after assignment
     } catch (bioError) {
       console.error("Error checking bios:", bioError);
-      // Fallback to default high fee (0.75) if bio check fails
+      // Fallback to no_tag tier if bio check fails
+    }
+
+    // Determine tier for room assignment
+    let tier = "no_tag";
+    if (initiatorHasTag && counterpartyHasTag) {
+      tier = "both_tags";
+    } else if (initiatorHasTag || counterpartyHasTag) {
+      tier = "one_tag";
     }
 
     // Network fee will be set based on chain selection (BSC or TRON) and bio status
@@ -365,7 +372,7 @@ module.exports = async (ctx) => {
         assignedGroup = await GroupPoolService.assignGroup(
           escrowId,
           ctx.telegram,
-          feePercent, // Pass required fee percent
+          tier, // Pass tier instead of feePercent
         );
 
         // Always enforce join-request approval with a freshly generated link
@@ -428,9 +435,9 @@ module.exports = async (ctx) => {
       approvedUserIds: [], // Will be populated as users join via join-request approval
       originChatId: String(chatId),
       // Save fee details
-      feeRate: feePercent,
+      feeRate: assignedGroup.feePercent,
       networkFee: networkFee,
-      contractAddress: assignedGroup.contractAddress || null,
+      contractAddress: null,
     });
     await newEscrow.save();
 
@@ -454,7 +461,7 @@ module.exports = async (ctx) => {
     )}\n• ${formatParticipantWithRole(participants[1], "Counterparty")}`;
     const noteText =
       "Note: Only the mentioned members can join. Never join any link shared via DM.";
-    const feeText = `\n💰 <b>Fee Tier:</b> ${feePercent}%`;
+    const feeText = `\n💰 <b>Fee Tier:</b> ${assignedGroup.feePercent}%`;
     const message = `<b>🏠 Deal Room Created!</b>\n\n🔗 Join Link: ${inviteLink}\n\n${participantsText}\n${feeText}\n\n${noteText}`;
     const inviteMsg = await withRetry(() =>
       ctx.replyWithPhoto(images.DEAL_ROOM_CREATED, {

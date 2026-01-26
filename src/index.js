@@ -1,4 +1,4 @@
-require("./utils/logger"); // Apply IST timestamp logging globally
+require("./utils/logger");
 const { Telegraf, Markup } = require("telegraf");
 const { ethers } = require("ethers");
 const mongoose = require("mongoose");
@@ -201,13 +201,10 @@ function parseFlexibleNumber(value) {
       decimalSeparator = null;
     }
   } else if (lastDot > -1) {
-    // Check if there are multiple dots (likely thousands separators)
     const dotCount = (str.match(/\./g) || []).length;
     if (dotCount > 1) {
       decimalSeparator = null;
     } else {
-      // Single dot is treated as decimal separator (US/English standard)
-      // This fixes issues where 1.234 or 0.123 were parsed as 1234 or 123
       decimalSeparator = ".";
     }
   }
@@ -412,7 +409,6 @@ class EscrowBot {
           return;
         }
 
-        // Strict check: Cannot cancel if deposit address is already generated
         if (escrow.depositAddress || escrow.uniqueDepositAddress) {
           return ctx.reply(
             "❌ Trade cannot be cancelled after the deposit address has been generated.",
@@ -437,7 +433,6 @@ class EscrowBot {
           );
         }
 
-        // If Admin, cancel immediately
         if (isAdmin) {
           await ctx.reply("⚠️ Admin cancelled the deal. Resetting group...");
           escrow.status = "cancelled";
@@ -446,11 +441,8 @@ class EscrowBot {
           return;
         }
 
-        // For Buyer/Seller, require confirmation from BOTH
         escrow.buyerConfirmedCancel = false;
         escrow.sellerConfirmedCancel = false;
-
-        // No auto-confirm. Both must explicitly click.
 
         await escrow.save();
 
@@ -828,7 +820,6 @@ Both parties must confirm to proceed.
           txHash = hashMatch[1];
         }
 
-        // Normalize to lowercase to ensure global uniqueness check works case-insensitively
         txHash = txHash.toLowerCase();
 
         const txChainUpper = (escrow.chain || "").toUpperCase();
@@ -849,20 +840,15 @@ Both parties must confirm to proceed.
           txHash = "0x" + txHash;
         }
 
-        // 15-Minute Age Validation
         try {
-          // Use 'await' to get timestamp (in ms)
           const txTimestamp = await BlockchainService.getTransactionTimestamp(
             escrow.chain,
             txHash,
           );
           const timeDiff = Date.now() - txTimestamp;
 
-          // 15 minutes = 15 * 60 * 1000 = 900000 ms
           const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 
-          // If timestamp is 0, it means fetch failed. We can either block or warn.
-          // Blocking is safer for security.
           if (txTimestamp === 0) {
             await ctx.reply(
               "⚠️ Could not verify transaction time. Please try again in a moment or contact support.",
@@ -885,7 +871,6 @@ Both parties must confirm to proceed.
           return;
         }
 
-        // Use case-insensitive regex to catch duplicates even if legacy data has mixed case
         const txHashRegex = new RegExp(`^${txHash}$`, "i");
         const existingEscrow = await Escrow.findOne({
           $or: [
@@ -1388,7 +1373,6 @@ Use /release After Fund Transfer to Seller
         const groupId = escrow.groupId;
 
         if (escrow.tradeDetailsStep === "step4_amount") {
-          // Strict validation: No commas allowed, only numbers and dot
           if (text.includes(",") || !/^\d+(\.\d+)?$/.test(text)) {
             await ctx.reply(
               "❌ Invalid format.\n\nPlease enter the amount using ONLY numbers and '.' (dot) for decimals.\n\nExample: 1500.50\n(Do not use ',' commas)",
@@ -1416,10 +1400,17 @@ Use /release After Fund Transfer to Seller
           await escrow.save();
           return;
         } else if (escrow.tradeDetailsStep === "step5_rate") {
-          const rate = parseFlexibleNumber(text);
+          if (text.includes(",") || !/^\d+(\.\d+)?$/.test(text)) {
+            await ctx.reply(
+              "❌ Invalid format.\n\nPlease enter the rate using ONLY numbers and '.' (dot) for decimals.\n\nExample: 89.5\n(Do not use ',' commas)",
+            );
+            return;
+          }
+
+          const rate = parseFloat(text);
           if (isNaN(rate) || rate <= 0) {
             await ctx.reply(
-              "❌ Please enter a valid rate. Examples: 89.5 or 89,50",
+              "❌ Please enter a valid rate greater than 0.\n\nExample: 89.5",
             );
             return;
           }
@@ -1640,9 +1631,6 @@ Use /release After Fund Transfer to Seller
           return ctx.reply("❌ Release amount must be greater than 0.");
         }
 
-        // NET CALCULATION: Deduct fees from the gross release amount
-        // NET CALCULATION: For display only.
-        // We store the GROSS amount in pendingReleaseAmount so callbackHandler can deduct fees properly.
         const currentFeeRate =
           escrow.feeRate !== undefined ? Number(escrow.feeRate) : 0.75;
         const currentNetworkFee =
@@ -1651,14 +1639,11 @@ Use /release After Fund Transfer to Seller
         const grossReleaseAmount =
           requestedAmount !== null ? requestedAmount : formattedTotalDeposited;
 
-        // Fee is percentage of the GROSS amount being released (for estimation display)
-        // Actual fee logic in callbackHandler is: (Gross - NetworkFee) * FeeRate
         const estimatedAmountToContract =
           grossReleaseAmount - currentNetworkFee;
         const estimatedServiceFee =
           (estimatedAmountToContract * currentFeeRate) / 100;
 
-        // Net amount = Gross - NetworkFee - ServiceFee
         const netReleaseAmount = Math.max(
           0,
           estimatedAmountToContract - estimatedServiceFee,
@@ -1672,7 +1657,6 @@ Use /release After Fund Transfer to Seller
           );
         }
 
-        // CRITICAL FIX: Store GROSS amount here. callbackHandler will deduct fees.
         escrow.pendingReleaseAmount = grossReleaseAmount;
         escrow.pendingRefundAmount = null;
 
@@ -1993,7 +1977,6 @@ ${approvalNote}`;
           .getAllAdminIds()
           .includes(String(ctx.from.id));
 
-        // Idempotency: prevent double refund
         const callbackMessageId = ctx.callbackQuery?.message?.message_id;
         if (
           escrow.refundConfirmationMessageId &&
@@ -2005,117 +1988,248 @@ ${approvalNote}`;
 
         if (escrow.status === "refunded") {
           try {
-            // Remove the buttons to prevent further clicks
             await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
             await ctx.reply("✅ Refund already processed.");
           } catch (e) {}
           return;
         }
 
-        if (escrow.buyerId !== ctx.from.id && !isUserAdmin) {
-          try {
-            await ctx.answerCbQuery(
-              "❌ Only the buyer or admin can confirm refund.",
-            );
-          } catch (e) {}
-          return;
+        const userId = ctx.from.id;
+        const isBuyer = Number(escrow.buyerId) === Number(userId);
+        const isSeller = Number(escrow.sellerId) === Number(userId);
+
+        // Check if user is allowed to approve
+        if (!isBuyer && !isSeller && !isUserAdmin) {
+          return safeAnswerCbQuery(
+            ctx,
+            "❌ Only buyer, seller, or admin can approve refund.",
+          );
         }
 
+        // Determine if this is a partial refund (pendingRefundAmount is set)
+        const isPartialRefund =
+          escrow.pendingRefundAmount !== null &&
+          escrow.pendingRefundAmount !== undefined;
+
+        // Track individual approvals
+        if (isBuyer) {
+          escrow.buyerConfirmedRefund = true;
+        }
+        if (isSeller) {
+          escrow.sellerConfirmedRefund = true;
+        }
+        if (isUserAdmin && !isBuyer && !isSeller) {
+          // Admin confirms with their own flag (doesn't auto-approve for others)
+          escrow.adminConfirmedRefund = true;
+        }
+        await escrow.save();
+
+        const updatedEscrow = await Escrow.findById(escrow._id);
+
+        const buyerTag = updatedEscrow.buyerUsername
+          ? `@${updatedEscrow.buyerUsername}`
+          : `[${updatedEscrow.buyerId}]`;
+        const sellerTag = updatedEscrow.sellerUsername
+          ? `@${updatedEscrow.sellerUsername}`
+          : `[${updatedEscrow.sellerId}]`;
+
+        // Check if admin confirmed (admin confirmation alone is sufficient)
+        const adminApproved = updatedEscrow.adminConfirmedRefund === true;
+        const bothPartiesApproved =
+          updatedEscrow.buyerConfirmedRefund &&
+          updatedEscrow.sellerConfirmedRefund;
+
+        let approvalNote = "";
+        let statusSection = "";
+        let canExecute = false;
+
+        if (adminApproved) {
+          // Admin confirmed - show admin status
+          statusSection = `✅ Admin - Confirmed`;
+          approvalNote = "✅ Admin confirmed. Processing refund...";
+          canExecute = true;
+        } else if (isPartialRefund) {
+          // Partial refund requires both buyer AND seller approval
+          const sellerLine = updatedEscrow.sellerConfirmedRefund
+            ? `✅ ${sellerTag} - Confirmed`
+            : `⌛️ ${sellerTag} - Waiting...`;
+          const buyerLine = updatedEscrow.buyerConfirmedRefund
+            ? `✅ ${buyerTag} - Confirmed`
+            : `⌛️ ${buyerTag} - Waiting...`;
+          statusSection = `${sellerLine}\n${buyerLine}`;
+
+          if (bothPartiesApproved) {
+            approvalNote = "✅ All approvals received. Processing refund...";
+            canExecute = true;
+          } else {
+            approvalNote =
+              "⚠️ Both Buyer and Seller must confirm partial refund.";
+          }
+        } else {
+          // Full refund only requires buyer approval
+          statusSection = updatedEscrow.buyerConfirmedRefund
+            ? `✅ ${buyerTag} - Confirmed`
+            : `⌛️ ${buyerTag} - Waiting...`;
+
+          if (updatedEscrow.buyerConfirmedRefund) {
+            approvalNote = "✅ Buyer confirmed. Processing refund...";
+            canExecute = true;
+          } else {
+            approvalNote = "Only the buyer needs to approve refund.";
+          }
+        }
+
+        // Update the confirmation message with current status
+        if (updatedEscrow.releaseConfirmationMessageId) {
+          const refundCaption = `<b>Refund Confirmation${
+            isPartialRefund ? " (Partial)" : ""
+          }</b>
+
+${statusSection}
+
+${approvalNote}`;
+
+          try {
+            await ctx.telegram.editMessageCaption(
+              updatedEscrow.groupId,
+              updatedEscrow.releaseConfirmationMessageId,
+              null,
+              refundCaption,
+              {
+                parse_mode: "HTML",
+                reply_markup: !canExecute
+                  ? {
+                      inline_keyboard: [
+                        [
+                          Markup.button.callback(
+                            "✅ Confirm Refund",
+                            `refund_confirm_yes_${updatedEscrow.escrowId}`,
+                          ),
+                          Markup.button.callback(
+                            "❌ Cancel",
+                            `refund_confirm_no_${updatedEscrow.escrowId}`,
+                          ),
+                        ],
+                      ],
+                    }
+                  : undefined,
+              },
+            );
+          } catch (e) {
+            const description = e?.response?.description || e?.message || "";
+            if (!description.includes("message is not modified")) {
+              console.error("Error updating refund confirmation message:", e);
+            }
+          }
+        }
+
+        // Notify user of their approval
+        if (canExecute) {
+          await safeAnswerCbQuery(
+            ctx,
+            isPartialRefund
+              ? "✅ Both parties approved. Processing refund..."
+              : "✅ Refund approved. Processing...",
+          );
+        } else {
+          await safeAnswerCbQuery(
+            ctx,
+            "✅ Your approval recorded. Waiting for other party...",
+          );
+          return; // Don't execute yet, waiting for other party
+        }
+
+        // Only execute if we have all required approvals
+        if (!canExecute) return;
+
         const decimals = BlockchainService.getTokenDecimals(
-          escrow.token,
-          escrow.chain,
+          updatedEscrow.token,
+          updatedEscrow.chain,
         );
         const amountWeiOverride =
-          escrow.accumulatedDepositAmountWei &&
-          escrow.accumulatedDepositAmountWei !== "0"
-            ? escrow.accumulatedDepositAmountWei
+          updatedEscrow.accumulatedDepositAmountWei &&
+          updatedEscrow.accumulatedDepositAmountWei !== "0"
+            ? updatedEscrow.accumulatedDepositAmountWei
             : null;
 
-        let refundAmount = escrow.pendingRefundAmount;
+        let refundAmount = updatedEscrow.pendingRefundAmount;
         const totalDeposited = Number(
-          escrow.accumulatedDepositAmount ||
-            escrow.depositAmount ||
-            escrow.confirmedAmount ||
+          updatedEscrow.accumulatedDepositAmount ||
+            updatedEscrow.depositAmount ||
+            updatedEscrow.confirmedAmount ||
             0,
         );
 
         if (!refundAmount || refundAmount <= 0) {
-          const amountWeiOverride =
-            escrow.accumulatedDepositAmountWei &&
-            escrow.accumulatedDepositAmountWei !== "0"
-              ? escrow.accumulatedDepositAmountWei
-              : null;
           refundAmount = amountWeiOverride
             ? Number(ethers.formatUnits(BigInt(amountWeiOverride), decimals))
             : totalDeposited;
         }
 
-        const networkFee = escrow.networkFee;
-        const amountToContract = refundAmount - networkFee;
-
-        // Contract will deduct service fee from this amount
-        const serviceFeeOnNet = (amountToContract * escrow.feeRate) / 100;
-        const actualAmountToUser = amountToContract - serviceFeeOnNet;
+        const networkFee = updatedEscrow.networkFee;
+        // For refunds, only deduct network fee (no service fee charged)
+        const actualAmountToUser = refundAmount - networkFee;
 
         if (actualAmountToUser <= 0) {
           return ctx.reply(
-            `❌ Refund amount too small to cover fees (Network: ${networkFee}, Service: ~${serviceFeeOnNet.toFixed(
-              2,
-            )} ${escrow.token}).`,
+            `❌ Refund amount too small to cover network fee (${networkFee} ${updatedEscrow.token}).`,
           );
         }
 
         await ctx.reply("🔄 Processing refund... please wait.");
 
         try {
-          if (!escrow.sellerAddress) {
+          if (!updatedEscrow.sellerAddress) {
             return ctx.reply("❌ Seller address missing.");
           }
 
           const refundResult = await BlockchainService.refundFunds(
-            escrow.token,
-            escrow.chain,
-            escrow.sellerAddress,
-            amountToContract, // Send amount after network fee, contract deducts service fee
+            updatedEscrow.token,
+            updatedEscrow.chain,
+            updatedEscrow.sellerAddress,
+            actualAmountToUser,
             null,
-            escrow.groupId,
-            escrow.contractAddress, // Pass explicit contract address to avoid lookup error
+            updatedEscrow.groupId,
+            updatedEscrow.contractAddress,
           );
 
           if (!refundResult || !refundResult.transactionHash) {
             throw new Error("Refund transaction failed (no hash).");
           }
 
-          const isPartialRefund =
+          const isActualPartialRefund =
             Math.abs(totalDeposited - actualAmountToUser) > 0.00001;
 
-          if (isPartialRefund) {
+          if (isActualPartialRefund) {
             const remaining = totalDeposited - refundAmount;
             if (remaining < 0.00001) {
-              escrow.status = "refunded";
-              escrow.accumulatedDepositAmount = 0;
-              escrow.depositAmount = 0;
-              escrow.confirmedAmount = 0;
-              escrow.accumulatedDepositAmountWei = "0";
+              updatedEscrow.status = "refunded";
+              updatedEscrow.accumulatedDepositAmount = 0;
+              updatedEscrow.depositAmount = 0;
+              updatedEscrow.confirmedAmount = 0;
+              updatedEscrow.accumulatedDepositAmountWei = "0";
             } else {
-              escrow.accumulatedDepositAmount = remaining;
-              escrow.depositAmount = remaining;
-              escrow.confirmedAmount = remaining;
-              // Status stays 'deposited' or whatever previous state was
+              updatedEscrow.accumulatedDepositAmount = remaining;
+              updatedEscrow.depositAmount = remaining;
+              updatedEscrow.confirmedAmount = remaining;
+              // Clear pending refund and confirmation flags for next refund
+              updatedEscrow.pendingRefundAmount = null;
+              updatedEscrow.buyerConfirmedRefund = false;
+              updatedEscrow.sellerConfirmedRefund = false;
             }
           } else {
-            escrow.status = "refunded";
-            escrow.accumulatedDepositAmount = 0;
-            escrow.depositAmount = 0;
-            escrow.confirmedAmount = 0;
-            escrow.accumulatedDepositAmountWei = "0";
+            updatedEscrow.status = "refunded";
+            updatedEscrow.accumulatedDepositAmount = 0;
+            updatedEscrow.depositAmount = 0;
+            updatedEscrow.confirmedAmount = 0;
+            updatedEscrow.accumulatedDepositAmountWei = "0";
           }
-          await escrow.save();
+          await updatedEscrow.save();
 
           try {
             await CompletionFeedService.handleRefund({
-              escrow,
-              refundAmount: actualAmountToUser, // Log ACTUAL amount user receives
+              escrow: updatedEscrow,
+              refundAmount: actualAmountToUser,
               transactionHash: refundResult.transactionHash,
               telegram: ctx.telegram,
             });
@@ -2125,22 +2239,22 @@ ${approvalNote}`;
 
           const successMsg = `✅ <b>Refund Successful!</b>
             
-💸 <b>Refunded:</b> ${actualAmountToUser.toFixed(5)} ${escrow.token}
+💸 <b>Refunded:</b> ${actualAmountToUser.toFixed(5)} ${updatedEscrow.token}
 🔗 <b>TX:</b> <code>${refundResult.transactionHash}</code>
 
 Funds returned to Seller.`;
 
           await ctx.reply(successMsg, { parse_mode: "HTML" });
 
-          if (escrow.status === "refunded") {
+          if (updatedEscrow.status === "refunded") {
             setTimeout(async () => {
               try {
                 const group = await GroupPool.findOne({
-                  assignedEscrowId: escrow.escrowId,
+                  assignedEscrowId: updatedEscrow.escrowId,
                 });
                 if (group) {
                   await GroupPoolService.removeUsersFromGroup(
-                    escrow,
+                    updatedEscrow,
                     group.groupId,
                     ctx.telegram,
                   );
@@ -2247,7 +2361,6 @@ Funds returned to Seller.`;
           return ctx.reply("❌ No available balance found.");
         }
 
-        // Validate real on-chain balance
         const bs = BlockchainService;
         let realChainBalance = availableBalance;
         let isMismatch = false;
@@ -2260,10 +2373,9 @@ Funds returned to Seller.`;
               escrow.contractAddress,
             );
 
-            // Allow small buffer (0.001) for float inconsistencies
             if (realChainBalance < availableBalance - 0.001) {
               isMismatch = true;
-              availableBalance = realChainBalance; // Clamp to actual
+              availableBalance = realChainBalance;
             }
           }
         } catch (e) {
@@ -2510,6 +2622,7 @@ This is the current available balance for this trade.`;
       adminResetAllGroups,
       adminWithdrawAllBsc,
       adminWithdrawAllTron,
+      adminWithdrawRoom,
       setupAdminActions,
     } = adminHandler;
 
@@ -2530,9 +2643,10 @@ This is the current available balance for this trade.`;
     this.bot.command("admin_reset_force", adminResetForce);
     this.bot.command("admin_reset_all_groups", adminResetAllGroups);
 
-    // Consolidated Withdrawal Commands
     this.bot.command("withdraw_all_bsc", adminWithdrawAllBsc);
     this.bot.command("withdraw_all_tron", adminWithdrawAllTron);
+
+    this.bot.hears(/^\/withdraw_room_\d+$/i, adminWithdrawRoom);
 
     // Setup admin actions (callbacks)
     setupAdminActions(this.bot);
@@ -2546,11 +2660,8 @@ This is the current available balance for this trade.`;
         const chatId = String(ctx.chat.id);
         const leftMember = ctx.message.left_chat_member;
 
-        // Ignore if bot itself left (handle elsewhere)
         if (leftMember.id === ctx.botInfo.id) return;
 
-        // Use findGroupEscrow to locate any relevant escrow for this group
-        // We only care about stages BEFORE deposit is confirmed
         const escrow = await findGroupEscrow(chatId, [
           "draft",
           "awaiting_details",
@@ -2559,12 +2670,10 @@ This is the current available balance for this trade.`;
 
         if (!escrow) return;
 
-        // Check if the user who left is a party to the deal
         const isBuyer = escrow.buyerId && escrow.buyerId === leftMember.id;
         const isSeller = escrow.sellerId && escrow.sellerId === leftMember.id;
 
         if (isBuyer || isSeller) {
-          // If a party leaves, trigger recycling logic
           if (escrow.isScheduledForRecycle) return;
 
           const role = isBuyer ? "Buyer" : "Seller";
@@ -2577,13 +2686,9 @@ This is the current available balance for this trade.`;
           escrow.isScheduledForRecycle = true;
           await escrow.save();
 
-          // Schedule immediate check/recycle in 10 minutes via simple timeout
-          // We also have the background poller as backup
           setTimeout(async () => {
             try {
               const freshEscrow = await Escrow.findById(escrow._id);
-              // conditions might have changed in 10 mins (e.g., user re-joined? or status changed?)
-              // For simplicity, if status is still same and not updated recently, recycle.
               if (
                 freshEscrow &&
                 ["draft", "awaiting_details", "awaiting_deposit"].includes(
@@ -2666,18 +2771,13 @@ This is the current available balance for this trade.`;
     try {
       console.log("🚀 Starting Escrow Bot...");
 
-      // Start background monitoring for inactivity
       this.setupGroupMonitoring();
 
       await connectDB();
 
       try {
         const addr = await BlockchainService.initialize();
-      } catch (e) {
-        console.warn(
-          "⚠️ EscrowVault not found. Bot will work in limited mode. Deploy with `npm run deploy:sepolia`",
-        );
-      }
+      } catch (e) {}
 
       await this.bot.launch();
       console.log("🤖 Escrow Bot started successfully!");

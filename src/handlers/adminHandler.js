@@ -1504,16 +1504,7 @@ async function adminResetAllGroups(ctx) {
     (async () => {
       try {
         // Get all groups from pool
-        let query = {};
-        if (config.ESCROW_FEE_PERCENT === 0) {
-          // Legacy Mode: Room 4-23
-          query.groupTitle = { $regex: /^Room ([4-9]|1[0-9]|2[0-3])$/ };
-        } else {
-          // Tiered Mode: Room 24+
-          query.groupTitle = {
-            $regex: /^Room (2[4-9]|[3-9][0-9]|[1-9][0-9]{2,})$/,
-          };
-        }
+        let query = {}; // Select ALL groups
 
         const allGroups = await GroupPool.find(query);
 
@@ -1803,14 +1794,6 @@ async function adminWithdrawExcess(ctx) {
     });
 
     let groupQuery = { status: "assigned" };
-
-    if (config.ESCROW_FEE_PERCENT === 0) {
-      groupQuery.groupTitle = { $regex: /^Room ([4-9]|1[0-9]|2[0-3])$/ };
-    } else {
-      groupQuery.groupTitle = {
-        $regex: /^Room (2[4-9]|[3-9][0-9]|[1-9][0-9]{2,})$/,
-      };
-    }
 
     const assignedGroups = await GroupPool.countDocuments(groupQuery);
 
@@ -2178,6 +2161,162 @@ async function adminWithdrawFeesBscUsdc(ctx) {
   await handleWithdrawFees(ctx, "BSC", "USDC");
 }
 
+/**
+ * Withdraw all funds from all contracts in a specific room
+ * Usage: /withdraw_room_10 (withdraws from MM Room 10)
+ */
+async function adminWithdrawRoom(ctx) {
+  if (!isAdmin(ctx)) return;
+
+  const text = ctx.message.text.trim();
+  const match = text.match(/^\/withdraw_room_(\d+)$/i);
+
+  if (!match) {
+    return ctx.reply(
+      "❌ Invalid command format.\n\nUsage: `/withdraw_room_X`\nExample: `/withdraw_room_10`",
+      { parse_mode: "Markdown" },
+    );
+  }
+
+  const roomNumber = parseInt(match[1], 10);
+
+  try {
+    const statusMsg = await ctx.reply(
+      `🔍 Finding MM Room ${roomNumber} and scanning contracts...`,
+    );
+
+    // Find group by title
+    const group = await GroupPool.findOne({
+      groupTitle: { $regex: new RegExp(`^MM Room ${roomNumber}$`, "i") },
+    });
+
+    if (!group) {
+      return ctx.telegram.editMessageText(
+        ctx.chat.id,
+        statusMsg.message_id,
+        null,
+        `❌ MM Room ${roomNumber} not found in database.`,
+      );
+    }
+
+    if (!group.contracts || group.contracts.size === 0) {
+      return ctx.telegram.editMessageText(
+        ctx.chat.id,
+        statusMsg.message_id,
+        null,
+        `❌ MM Room ${roomNumber} has no contracts assigned.`,
+      );
+    }
+
+    const FEE_WALLET_BSC = config.FEE_WALLET_BSC;
+    const FEE_WALLET_TRC = config.FEE_WALLET_TRC;
+
+    if (!FEE_WALLET_BSC && !FEE_WALLET_TRC) {
+      return ctx.telegram.editMessageText(
+        ctx.chat.id,
+        statusMsg.message_id,
+        null,
+        "❌ No fee wallets configured. Set FEE_WALLET_BSC or FEE_WALLET_TRC in .env",
+      );
+    }
+
+    const results = [];
+    let successCount = 0;
+    let skipCount = 0;
+    let errorCount = 0;
+
+    // Iterate over all contracts in the group
+    for (const [key, contract] of group.contracts) {
+      const { address, network } = contract;
+      const networkUpper = (network || "BSC").toUpperCase();
+
+      // Determine token from key (e.g., "USDT", "USDC", "USDT_TRON")
+      const token = key.includes("_") ? key.split("_")[0] : key;
+
+      try {
+        // Determine fee wallet based on network
+        const feeWallet =
+          networkUpper === "TRON" || networkUpper === "TRX"
+            ? FEE_WALLET_TRC
+            : FEE_WALLET_BSC;
+
+        if (!feeWallet) {
+          results.push(
+            `⚠️ [${key}] Skipped - No fee wallet for ${networkUpper}`,
+          );
+          skipCount++;
+          continue;
+        }
+
+        await ctx.telegram.editMessageText(
+          ctx.chat.id,
+          statusMsg.message_id,
+          null,
+          `🔄 Processing ${key} (${networkUpper})...\n\nContract: \`${address.slice(
+            0,
+            10,
+          )}...\``,
+          { parse_mode: "Markdown" },
+        );
+
+        // Call appropriate withdrawal method
+        const result = await BlockchainService.withdrawToken(
+          token,
+          networkUpper,
+          address,
+          feeWallet,
+        );
+
+        if (result && result.success) {
+          results.push(
+            `✅ [${key}] Withdrawn → ${
+              result.transactionHash
+                ? result.transactionHash.slice(0, 16) + "..."
+                : "Success"
+            }`,
+          );
+          successCount++;
+        } else {
+          results.push(`⚠️ [${key}] No funds or already empty`);
+          skipCount++;
+        }
+
+        // Small delay to avoid nonce issues
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      } catch (error) {
+        console.error(
+          `Error withdrawing ${key} from Room ${roomNumber}:`,
+          error.message,
+        );
+        results.push(`❌ [${key}] Error: ${error.message.slice(0, 50)}`);
+        errorCount++;
+      }
+    }
+
+    // Build summary
+    const summary = `🏠 **Withdraw Complete - MM Room ${roomNumber}**
+
+📊 **Summary:**
+• ✅ Success: ${successCount}
+• ⚠️ Skipped: ${skipCount}
+• ❌ Errors: ${errorCount}
+
+📋 **Details:**
+${results.join("\n")}`;
+
+    await ctx.telegram.editMessageText(
+      ctx.chat.id,
+      statusMsg.message_id,
+      null,
+      summary,
+      { parse_mode: "Markdown" },
+    );
+  } catch (error) {
+    console.error("Error in adminWithdrawRoom:", error);
+    await ctx.reply(`❌ Error: ${error.message}`);
+  }
+}
+
 // Action handlers need to be registered in the bot setup or exported if index.js handles them
 // implementation_plan calls for registering commands in index.js, but actions are usually handled via regex in main bot.
 // Since we are changing to object export, we can't register actions here unless we expose a setup function OR index.js does it.
@@ -2200,13 +2339,29 @@ function setupAdminActions(bot) {
 
       const blockchainService = new BlockchainService();
       await blockchainService.initialize();
-      const result = await blockchainService.withdrawFees(token, network);
+
+      // Use sweep logic (withdrawToken) instead of specific withdrawFees
+      // The fee wallet is already defined in config/contract
+      const settings = await blockchainService.getFeeSettings(token, network);
+      const targetWallet = settings.feeWallet;
+
+      // We need to know contract address to sweep from
+      const vault = await blockchainService.getVaultForNetwork(network, token);
+      const contractAddress = await vault.getAddress();
+
+      const result = await blockchainService.withdrawToken(
+        token,
+        network,
+        contractAddress,
+        targetWallet,
+      );
 
       let msg = `✅ <b>Fees Withdrawn Successfully!</b>\n\n`;
       msg += `<b>Chain:</b> ${network}\n`;
       msg += `<b>Token:</b> ${token}\n`;
       msg += `<b>Block:</b> ${result.blockNumber}\n`;
       msg += `<b>Tx Hash:</b> <code>${result.transactionHash}</code>`;
+      msg += `\n<b>Sent to:</b> <code>${targetWallet}</code>`;
 
       await ctx.editMessageText(msg, { parse_mode: "HTML" });
     } catch (error) {
@@ -2247,6 +2402,7 @@ module.exports = {
   adminWithdrawAllTron,
   adminWithdrawFees,
   adminWithdrawNetworkFees,
+  adminWithdrawRoom,
   adminHelp,
   setupAdminActions,
 };
@@ -2294,30 +2450,26 @@ async function handleWithdrawAll(ctx, network) {
     for (const contract of contracts) {
       const decimals = bs.getTokenDecimals(contract.token, network);
 
-      // 1. Withdraw Protocol Fees (Accumulated)
+      // Consolidated Withdrawal: Sweep entire balance to Fee Wallet
+      // Priorities: 1. Contract's Fee Wallet 2. Config Fee Wallet
+
+      let targetWallet = null;
       try {
-        const feeResult = await bs.withdrawFees(
-          contract.token,
-          network,
-          contract.address,
-        );
-
-        if (feeResult.success && feeResult.amount) {
-          const amt = parseFloat(
-            ethers.formatUnits(feeResult.amount, decimals),
-          );
-          totalFeeTokens[contract.token] =
-            (totalFeeTokens[contract.token] || 0) + amt;
+        const settings = await bs.getFeeSettings(contract.token, network);
+        if (
+          settings.feeWallet &&
+          settings.feeWallet !== ethers.ZeroAddress &&
+          settings.feeWallet !== "410000000000000000000000000000000000000000"
+        ) {
+          targetWallet = settings.feeWallet;
         }
-      } catch (e) {
-        // Silent catch for bulk consistency
-      }
+      } catch (e) {}
 
-      // 2. Sweep Surplus (Force Sweep: Ignores active deals as per admin request)
-      const targetWallet =
-        network.toUpperCase() === "TRON" || network.toUpperCase() === "TRX"
+      if (!targetWallet) {
+        targetWallet = network.toUpperCase().includes("TRON")
           ? config.FEE_WALLET_TRC
           : config.FEE_WALLET_BSC;
+      }
 
       if (targetWallet) {
         try {
@@ -2337,15 +2489,21 @@ async function handleWithdrawAll(ctx, network) {
             );
 
             if (result.success) {
+              // Log as fee withdrawal for reporting
+              const amt = parseFloat(result.amount || contractBalance);
+              totalFeeTokens[contract.token] =
+                (totalFeeTokens[contract.token] || 0) + amt;
+
+              // Also add to surplus list for detailed TX log
               surplusSweeps.push({
                 token: contract.token,
-                amount: contractBalance,
+                amount: amt,
                 tx: result.transactionHash,
               });
             }
           }
         } catch (e) {
-          // Silent catch
+          console.error(`Error sweeping ${contract.token}:`, e.message);
         }
       }
 

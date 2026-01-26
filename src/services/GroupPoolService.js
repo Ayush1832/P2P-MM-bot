@@ -1,30 +1,36 @@
 const GroupPool = require("../models/GroupPool");
 const config = require("../../config");
+const Contract = require("../models/Contract");
+
+// Tier to feePercent mapping
+const TIER_FEE_MAP = {
+  both_tags: 0.25,
+  one_tag: 0.5,
+  no_tag: 0.75,
+};
 
 class GroupPoolService {
   /**
-   * Assign an available group to an escrow
+   * Assign an available group to an escrow based on bio tier
+   * @param {string} escrowId - The escrow ID to assign
+   * @param {object} telegram - Telegram API instance
+   * @param {string} tier - 'both_tags' | 'one_tag' | 'no_tag'
    */
-  async assignGroup(escrowId, telegram = null, requiredFeePercent = null) {
+  async assignGroup(escrowId, telegram = null, tier = "no_tag") {
     try {
-      const query = { status: "available" };
-
-      // Filter groups based on system mode (Legacy vs Tiered)
-      if (config.ESCROW_FEE_PERCENT === 0) {
-        // Legacy Mode: Room 4-23
-        query.groupTitle = /^Room ([4-9]|1[0-9]|2[0-3])$/;
-      } else {
-        // Tiered Mode: Room 24+ (24-99, 100+)
-        query.groupTitle = /^Room (2[4-9]|[3-9][0-9]|[1-9][0-9]{2,})$/;
+      // Determine required feePercent based on tier
+      const requiredFee = TIER_FEE_MAP[tier];
+      if (requiredFee === undefined) {
+        throw new Error(
+          `Invalid tier: ${tier}. Must be 'both_tags', 'one_tag', or 'no_tag'.`,
+        );
       }
 
-      // CRITICAL: Filter by required fee percent to match bio-based assignment
-      if (typeof requiredFeePercent === "number") {
-        query.feePercent = requiredFeePercent;
-      } else {
-        // If no fee specified, exclude 0% groups (disabled groups)
-        query.feePercent = { $ne: 0 };
-      }
+      // Query for available groups with the matching pre-set feePercent
+      const query = {
+        status: "available",
+        feePercent: requiredFee,
+      };
 
       const updateData = {
         status: "assigned",
@@ -32,35 +38,34 @@ class GroupPoolService {
         assignedAt: new Date(),
       };
 
-      // Fee percent is now set in query, not in updateData
-
+      // Find and update atomically (do NOT modify feePercent - it's pre-set in DB)
       const updatedGroup = await GroupPool.findOneAndUpdate(
         query,
-        {
-          $set: updateData,
-        },
+        { $set: updateData },
         { new: true, sort: { createdAt: 1 } },
       );
 
       if (!updatedGroup) {
         // Check if there are any groups at all in the pool
-        const checkQuery = {};
-        if (config.ESCROW_FEE_PERCENT === 0) {
-          checkQuery.groupTitle = { $regex: /^Room ([4-9]|1[0-9]|2[0-3])$/ };
-        } else {
-          checkQuery.groupTitle = {
-            $regex: /^Room (2[4-9]|[3-9][0-9]|[1-9][0-9]{2,})$/,
-          };
-        }
-        const anyGroup = await GroupPool.findOne(checkQuery);
+        const anyGroup = await GroupPool.findOne({});
         if (!anyGroup) {
           throw new Error("No groups in pool. Please add a group.");
         }
 
-        // Removed specific fee error since we don't filter by fee anymore
+        // Check if there are groups with this fee but all occupied
+        const occupiedCount = await GroupPool.countDocuments({
+          feePercent: requiredFee,
+          status: { $ne: "available" },
+        });
+
+        if (occupiedCount > 0) {
+          throw new Error(
+            `All rooms for ${requiredFee}% fee tier are currently occupied. Please wait for a room to become available.`,
+          );
+        }
 
         throw new Error(
-          "No available groups in pool. All groups are currently occupied.",
+          `No rooms configured for ${requiredFee}% fee tier. Please run the setRoomFees script.`,
         );
       }
 
@@ -73,7 +78,8 @@ class GroupPoolService {
       if (
         !error.message ||
         (!error.message.includes("No available groups") &&
-          !error.message.includes("All groups are currently occupied"))
+          !error.message.includes("occupied") &&
+          !error.message.includes("No rooms"))
       ) {
         console.error("Error assigning group:", error);
       }
@@ -242,7 +248,7 @@ class GroupPoolService {
       group.completedAt = new Date();
       group.assignedEscrowId = null;
       group.assignedAt = null;
-      group.feePercent = null;
+      // NOTE: Do NOT clear feePercent - it's pre-set and must be preserved for tier-based assignment
       await group.save();
 
       return group;
@@ -313,6 +319,12 @@ class GroupPoolService {
         if (telegram) {
           await this.ensureAdminInGroup(groupId, telegram);
 
+          // Ensure addresses are assigned (if not already)
+          // Check contracts map size instead of depositAddresses
+          if (!existingGroup.contracts || existingGroup.contracts.size === 0) {
+            await this.assignAddressesToGroup(existingGroup);
+          }
+
           if (!existingGroup.inviteLink) {
             try {
               await this.generateInviteLink(groupId, telegram, {
@@ -335,6 +347,9 @@ class GroupPoolService {
       });
 
       await group.save();
+
+      // Assign addresses to the new group
+      await this.assignAddressesToGroup(group);
 
       if (telegram) {
         await this.ensureAdminInGroup(groupId, telegram);
@@ -383,12 +398,6 @@ class GroupPoolService {
         } catch (memberError) {
           adminIsMember = false;
         }
-
-        if (!adminIds.includes(adminUserId2) && !adminIsMember) {
-          console.warn(
-            `⚠️ WARNING: ADMIN_USER_ID2 (${adminUserId2}) is not present in group ${groupId}. Admin should be manually added to the group before adding it to the pool.`,
-          );
-        }
       } catch (error) {
         // Silently continue - can't verify if bot doesn't have access
       }
@@ -409,29 +418,7 @@ class GroupPoolService {
    */
   async getPoolStats() {
     try {
-      let matchStage = {};
-      if (config.ESCROW_FEE_PERCENT === 0) {
-        // Legacy Mode: Room 4-23 with 0% fee
-        matchStage = {
-          $and: [
-            { groupTitle: { $regex: /^Room ([4-9]|1[0-9]|2[0-3])$/ } },
-            {
-              $or: [
-                { feePercent: { $exists: false } },
-                { feePercent: null },
-                { feePercent: 0 },
-              ],
-            },
-          ],
-        };
-      } else {
-        // Tiered Mode: Room 24+ (only show groups from tiered tier)
-        matchStage = {
-          groupTitle: {
-            $regex: /^Room (2[4-9]|[3-9][0-9]|[1-9][0-9]{2,})$/,
-          },
-        };
-      }
+      const matchStage = {}; // Match all groups
 
       const stats = await GroupPool.aggregate([
         { $match: matchStage },
@@ -469,29 +456,7 @@ class GroupPoolService {
   async getGroupsByStatus(status) {
     try {
       let query = { status };
-      if (config.ESCROW_FEE_PERCENT === 0) {
-        // Legacy Mode: Room 4-23 with 0% fee
-        query = {
-          status,
-          $and: [
-            { groupTitle: { $regex: /^Room ([4-9]|1[0-9]|2[0-3])$/ } },
-            {
-              $or: [
-                { feePercent: { $exists: false } },
-                { feePercent: null },
-                { feePercent: 0 },
-              ],
-            },
-          ],
-        };
-      } else {
-        query = {
-          status,
-          groupTitle: {
-            $regex: /^Room (2[4-9]|[3-9][0-9]|[1-9][0-9]{2,})$/,
-          },
-        };
-      }
+      // Removed legacy filtering - now showing all groups by status
 
       const groups = await GroupPool.find(query).sort({ createdAt: -1 });
       return groups;
@@ -514,7 +479,7 @@ class GroupPoolService {
           assignedAt: null,
           completedAt: null,
           inviteLink: null,
-          feePercent: null,
+          // NOTE: Do NOT clear feePercent - it's pre-set and must be preserved
         },
       );
 
@@ -858,6 +823,71 @@ class GroupPoolService {
    * Check if group history is visible to new members and warn if so.
    * We want history to be HIDDEN for new members (so new buyers/sellers don't see old trades).
    */
+  async assignAddressesToGroup(group) {
+    try {
+      // Find one contract for each required token/network
+      // Logic: Start with basic defaults or unused ones.
+      // Since we removed groupId, we don't have "reserved" contracts anymore in the same way.
+      // We will blindly assign *available* deployed contracts.
+      // Ideally, we should distribute load or pick unique ones if they are unique.
+      // For now, let's pick the FIRST deployed contract for each type found in DB.
+      // TODO: If we need UNIQUE addresses per group, we must check if address is used.
+
+      const requiredTokens = [
+        { token: "USDT", network: "BSC" },
+        { token: "USDC", network: "BSC" },
+        // For TRON, key should match what legacy code expected or generic format.
+        // Contracts map keys where like "USDT" (BSC implied) or "USDT_TRON" (explicit).
+        // Let's stick to explicit keys if possible, but legacy might have used "USDT" for BSC.
+        // checking callbackHandler usage... it used "USDT" for BSC and "USDT_TRON" for Tron.
+        { token: "USDT", network: "TRON", key: "USDT_TRON" },
+      ];
+
+      if (!group.contracts) {
+        group.contracts = new Map();
+      }
+
+      for (const req of requiredTokens) {
+        // Determine key for the map
+        let key = req.key;
+        if (!key) {
+          // Default naming: USDT (for BSC), USDC (for BSC).
+          // If network is BSC, use token name only to match legacy expectation?
+          // Let's check callbackHandler legacy read...
+          // It checked group.contracts.get(token) directly (likely "USDT")
+          // So for BSC, key = req.token
+          if (req.network === "BSC") key = req.token;
+          else key = `${req.token}_${req.network}`;
+        }
+
+        if (group.contracts.get(key)) continue;
+
+        const contracts = await Contract.find({
+          token: req.token,
+          network: req.network,
+          status: "deployed",
+        }).limit(10);
+
+        if (contracts.length > 0) {
+          const picked =
+            contracts[Math.floor(Math.random() * contracts.length)];
+          // Store object with address and network (no feePercent)
+          group.contracts.set(key, {
+            address: picked.address,
+            network: req.network,
+          });
+        }
+      }
+
+      await group.save();
+    } catch (error) {
+      console.error(
+        `Error assigning addresses to group ${group.groupId}:`,
+        error,
+      );
+    }
+  }
+
   async checkGroupHistoryVisibility(groupId, telegram) {
     // Disabled per user notification: Bot should NOT send "Security Warning" about history visibility.
     // Admins are expected to manage this setting (Hidden for users).

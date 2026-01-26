@@ -38,13 +38,13 @@ module.exports = async (ctx) => {
 
     if (isDealConfirmed && !userIsAdmin) {
       return ctx.reply(
-        "❌ Only admin can restart the trade after deal confirmation."
+        "❌ Only admin can restart the trade after deal confirmation.",
       );
     }
 
     if (!isDealConfirmed && !userIsAdmin && !userIsBuyer && !userIsSeller) {
       return ctx.reply(
-        "❌ Only admin, buyer, or seller can restart the trade."
+        "❌ Only admin, buyer, or seller can restart the trade.",
       );
     }
 
@@ -55,7 +55,17 @@ module.exports = async (ctx) => {
 
     if (hasDeposits && !userIsAdmin) {
       return ctx.reply(
-        "❌ Cannot restart: Deposits have been made. Only admin can restart after deposits."
+        "❌ Cannot restart: Deposits have been made. Only admin can restart after deposits.",
+      );
+    }
+
+    // Block restart if deposit address has been generated (for non-admin users)
+    if (
+      (escrow.depositAddress || escrow.uniqueDepositAddress) &&
+      !userIsAdmin
+    ) {
+      return ctx.reply(
+        "❌ Trade cannot be restarted after the deposit address has been generated.",
       );
     }
 
@@ -63,7 +73,7 @@ module.exports = async (ctx) => {
       try {
         await ctx.telegram.unpinChatMessage(
           chatId,
-          escrow.dealConfirmedMessageId
+          escrow.dealConfirmedMessageId,
         );
       } catch (unpinError) {}
       escrow.dealConfirmedMessageId = null;
@@ -132,7 +142,7 @@ module.exports = async (ctx) => {
     await escrow.save();
 
     await ctx.reply(
-      "✅ Trade has been restarted. Please select your roles again to begin."
+      "✅ Trade has been restarted. Please select your roles again to begin.",
     );
 
     const images = require("../config/images");
@@ -140,7 +150,7 @@ module.exports = async (ctx) => {
       const label = formatParticipant(
         participant,
         index === 0 ? "Participant 1" : "Participant 2",
-        { html: true }
+        { html: true },
       );
       return `⏳ ${label} - Waiting...`;
     });
@@ -170,7 +180,7 @@ module.exports = async (ctx) => {
               ],
             ],
           },
-        }
+        },
       );
       escrow.roleSelectionMessageId = roleSelectionMsg.message_id;
       await escrow.save();
@@ -180,7 +190,7 @@ module.exports = async (ctx) => {
   } catch (error) {
     console.error("Error in restart handler:", error);
     ctx.reply(
-      "❌ Error restarting trade. Please try again or contact support."
+      "❌ Error restarting trade. Please try again or contact support.",
     );
   }
 };

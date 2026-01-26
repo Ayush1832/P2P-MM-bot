@@ -24,7 +24,7 @@ class AddressAssignmentService {
     network,
     amount,
     feePercent = null,
-    groupId = null
+    groupId = null,
   ) {
     try {
       const normalizedToken = (token || "").toUpperCase();
@@ -44,7 +44,6 @@ class AddressAssignmentService {
 
       normalizedNetwork = normalizedNetwork.toUpperCase();
 
-      // Fetch group's fee percent as the authoritative source
       let groupFeePercent = null;
       if (groupId) {
         try {
@@ -52,69 +51,41 @@ class AddressAssignmentService {
           if (group) {
             groupFeePercent = group.feePercent || 0.75; // Default to 0.75% if not set
 
-            if (group.contracts) {
-              let assignedContract = null;
-              if (
-                group.contracts.get &&
-                typeof group.contracts.get === "function"
-              ) {
-                assignedContract = group.contracts.get(normalizedToken);
-                if (
-                  !assignedContract ||
-                  assignedContract.network !== normalizedNetwork
-                ) {
-                  const specificKey = `${normalizedToken}_${normalizedNetwork}`;
-                  const specificContract = group.contracts.get(specificKey);
-                  if (specificContract) assignedContract = specificContract;
-                }
-              } else {
-                assignedContract = group.contracts[normalizedToken];
-                if (
-                  !assignedContract ||
-                  assignedContract.network !== normalizedNetwork
-                ) {
-                  const specificKey = `${normalizedToken}_${normalizedNetwork}`;
-                  if (group.contracts[specificKey])
-                    assignedContract = group.contracts[specificKey];
-                }
-              }
+            // Logic to find contract in the map
+            // New structure: contracts is Map<String, { address, network }>
+            // Keys: "USDT", "USDC", "USDT_TRON" (likely)
 
-              if (assignedContract && assignedContract.address) {
-                // CRITICAL VALIDATION: Ensure contract fee matches group fee
-                if (assignedContract.feePercent !== groupFeePercent) {
-                  console.warn(
-                    `⚠️ Contract fee mismatch for group ${groupId}: ` +
-                      `Group expects ${groupFeePercent}% but contract has ${assignedContract.feePercent}%. ` +
-                      `Falling back to query correct contract.`
-                  );
-                  // Don't return this contract, fall through to query with correct fee
-                } else {
-                  return {
-                    address: assignedContract.address,
-                    contractAddress: assignedContract.address,
-                    sharedWithAmount: null,
-                  };
+            let assignedContract = null;
+            if (group.contracts) {
+              const key1 = normalizedToken; // e.g. USDT
+              const key2 = `${normalizedToken}_${normalizedNetwork}`; // e.g. USDT_BSC or USDT_TRON
+
+              // Try specific key first (e.g. USDT_TRON)
+              if (group.contracts.get(key2)) {
+                assignedContract = group.contracts.get(key2);
+              } else if (group.contracts.get(key1)) {
+                // If found by generic token name, check network match to be safe
+                const c = group.contracts.get(key1);
+                if (c.network === normalizedNetwork) {
+                  assignedContract = c;
                 }
               }
             }
 
-            // Legacy fallback for old groups with contractAddress field
-            if (
-              group.contractAddress &&
-              normalizedToken === "USDT" &&
-              normalizedNetwork === "BSC"
-            ) {
+            if (assignedContract && assignedContract.address) {
               return {
-                address: group.contractAddress,
-                contractAddress: group.contractAddress,
+                address: assignedContract.address,
+                contractAddress: assignedContract.address,
                 sharedWithAmount: null,
               };
             }
+            // NOTE: Legacy `group.contractAddress` field has been removed from schema.
+            // All contracts are now stored in the `contracts` Map.
           }
         } catch (groupError) {
           console.error(
             "Error getting group-specific contract address:",
-            groupError
+            groupError,
           );
         }
       }
@@ -129,31 +100,21 @@ class AddressAssignmentService {
 
       // Query Contract collection with the correct fee
       let contract = null;
-      if (groupId) {
-        contract = await Contract.findOne({
-          name: "EscrowVault",
-          token: normalizedToken,
-          network: normalizedNetwork,
-          feePercent: normalizedFeePercent,
-          groupId: groupId,
-          status: "deployed",
-        });
-      }
+      // Removed: Legacy check by groupId (groupId field removed from Contract schema)
 
       if (!contract) {
         contract = await Contract.findOne({
           name: "EscrowVault",
           token: normalizedToken,
           network: normalizedNetwork,
-          feePercent: normalizedFeePercent,
           status: "deployed",
         });
       }
 
       if (!contract) {
         throw new Error(
-          `No EscrowVault contract found for ${normalizedToken} on ${normalizedNetwork} with ${normalizedFeePercent}% fee. ` +
-            `Please deploy the contract first using: npm run deploy`
+          `No EscrowVault contract found for ${normalizedToken} on ${normalizedNetwork}. ` +
+            `Please deploy the contract first using: npm run deploy`,
         );
       }
 

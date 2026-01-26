@@ -35,20 +35,6 @@ const ESCROW_VAULT_ABI = [
   },
   {
     inputs: [],
-    name: "withdrawFees",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "accumulatedFees",
-    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
     name: "token",
     outputs: [{ internalType: "address", name: "", type: "address" }],
     stateMutability: "view",
@@ -61,13 +47,6 @@ const ESCROW_VAULT_ABI = [
     stateMutability: "view",
     type: "function",
   },
-  {
-    inputs: [],
-    name: "feePercent",
-    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-    stateMutability: "view",
-    type: "function",
-  },
 ];
 
 class TronService {
@@ -77,7 +56,7 @@ class TronService {
     this.providers = [
       (config.TRON_RPC_URL || "https://api.trongrid.io").replace(
         /\/jsonrpc$/,
-        "/"
+        "/",
       ),
       "https://tron-rpc.publicnode.com",
     ];
@@ -131,25 +110,18 @@ class TronService {
       status: "deployed",
     };
 
-    if (groupId) {
-      query.groupId = groupId;
-      // vital: ignore feePercent if we are looking up by specific group ID,
-      // as the group's contract might have a non-zero fee.
-      delete query.feePercent;
-    }
-
     const contractEntry = await ContractModel.findOne(query);
     if (!contractEntry) {
       throw new Error(
         `EscrowVault not found for ${token} on TRON with ${desiredFeePercent}% fee${
           groupId ? ` (group ${groupId})` : ""
-        }`
+        }`,
       );
     }
 
     const contract = await this.tronWeb.contract(
       ESCROW_VAULT_ABI,
-      contractEntry.address
+      contractEntry.address,
     );
     return { contract, address: contractEntry.address };
   }
@@ -183,7 +155,7 @@ class TronService {
         } catch (e) {
           console.warn(
             "Could not resolve token address from vault:",
-            e.message
+            e.message,
           );
         }
       }
@@ -192,7 +164,7 @@ class TronService {
       const currentBalance = await this.getTokenBalance(tokenForCheck, address);
       if (currentBalance < amount) {
         throw new Error(
-          `Insufficient Vault Balance: Contract has ${currentBalance} but needs ${amount}`
+          `Insufficient Vault Balance: Contract has ${currentBalance} but needs ${amount}`,
         );
       }
 
@@ -243,7 +215,7 @@ class TronService {
         } catch (e) {
           console.warn(
             "Could not resolve token address from vault:",
-            e.message
+            e.message,
           );
         }
       }
@@ -252,7 +224,7 @@ class TronService {
       const currentBalance = await this.getTokenBalance(tokenForCheck, address);
       if (currentBalance < amount) {
         throw new Error(
-          `Insufficient Vault Balance: Contract has ${currentBalance} but needs ${amount}`
+          `Insufficient Vault Balance: Contract has ${currentBalance} but needs ${amount}`,
         );
       }
 
@@ -290,7 +262,7 @@ class TronService {
 
       const contract = await this.tronWeb.contract(
         ESCROW_VAULT_ABI,
-        contractAddress
+        contractAddress,
       );
 
       console.log(`[TRON] Calling withdrawToken on vault contract...`);
@@ -331,12 +303,25 @@ class TronService {
 
       // TRON calls
       const feeWallet = await contract.feeWallet().call();
-      const feePercent = await contract.feePercent().call();
-      const accumulated = await contract.accumulatedFees().call();
+
+      // Get balance as accumulated
+      let tokenForCheck = token;
+      if (token.toUpperCase() !== "USDT" && !token.startsWith("T")) {
+        try {
+          const onChainToken = await contract.token().call();
+          if (onChainToken)
+            tokenForCheck = this.tronWeb.address.fromHex(onChainToken);
+        } catch (e) {}
+      }
+      const balance = await this.getTokenBalance(
+        tokenForCheck,
+        contract.address || contractAddress,
+      );
+
       return {
         feeWallet: this.tronWeb.address.fromHex(feeWallet),
-        feePercent: Number(feePercent),
-        accumulated: accumulated.toString(),
+        feePercent: 0,
+        accumulated: balance.toString(),
       };
     } catch (error) {
       console.error("TRON getFeeSettings error:", error);
@@ -367,38 +352,7 @@ class TronService {
     }
   }
 
-  async withdrawFees({ token = "USDT", contractAddress = null }) {
-    await this.init();
-    return this._retryWithBackoff(async () => {
-      let contract;
-      if (contractAddress) {
-        contract = await this.tronWeb.contract().at(contractAddress);
-      } else {
-        const vault = await this.getVaultContract(token);
-        contract = vault.contract;
-      }
-
-      // Pre-check: Don't waste energy if no fees
-      const accumulated = await contract.accumulatedFees().call();
-      if (accumulated.toString() === "0") {
-        throw new Error(
-          `Validation Error: no-balance - Accumulated fees are 0. Withdrawal would fail.`
-        );
-      }
-
-      const tx = await contract.withdrawFees().send({
-        feeLimit: 100_000_000,
-        callValue: 0,
-      });
-
-      return {
-        success: true,
-        transactionHash: tx,
-        contractAddress: contractAddress,
-        amount: accumulated.toString(),
-      };
-    });
-  }
+  // withdrawFees removed in favor of withdrawToken (sweep)
 
   /**
    * Fetch TRC20 Transfer events to a given address (best-effort via TronGrid)
@@ -424,7 +378,8 @@ class TronService {
 
       return (events || [])
         .filter(
-          (ev) => ev && ev.result && (!fromBlock || ev.block_number > fromBlock)
+          (ev) =>
+            ev && ev.result && (!fromBlock || ev.block_number > fromBlock),
         )
         .map((ev) => {
           const from = ev.result.from;

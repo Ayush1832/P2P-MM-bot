@@ -6,13 +6,10 @@ const TronService = require("./TronService");
 
 const ESCROW_VAULT_ABI = [
   "function token() view returns (address)",
-  "function feePercent() view returns (uint256)",
   "function feeWallet() view returns (address)",
   "function release(address to, uint256 amount) external",
   "function refund(address to, uint256 amount) external",
   "function withdrawToken(address erc20Token, address to) external",
-  "function withdrawFees() external",
-  "function accumulatedFees() view returns (uint256)",
 ];
 
 const ERC20_ABI = [
@@ -30,27 +27,27 @@ class BlockchainService {
       BSC: new ethers.JsonRpcProvider(
         config.BSC_RPC_URL,
         null,
-        providerOptions
+        providerOptions,
       ),
       SEPOLIA: new ethers.JsonRpcProvider(
         config.SEPOLIA_RPC_URL,
         null,
-        providerOptions
+        providerOptions,
       ),
       ETH: new ethers.JsonRpcProvider(
         config.ETH_RPC_URL || "https://eth.llamarpc.com",
         null,
-        providerOptions
+        providerOptions,
       ),
       LTC: new ethers.JsonRpcProvider(
         config.LTC_RPC_URL || "https://ltc.llamarpc.com",
         null,
-        providerOptions
+        providerOptions,
       ),
       TRON: new ethers.JsonRpcProvider(
         config.TRON_RPC_URL || "https://api.trongrid.io",
         null,
-        providerOptions
+        providerOptions,
       ),
     };
 
@@ -62,7 +59,7 @@ class BlockchainService {
     Object.keys(this.providers).forEach((network) => {
       this.wallets[network] = new ethers.Wallet(
         privateKey,
-        this.providers[network]
+        this.providers[network],
       );
     });
 
@@ -81,25 +78,21 @@ class BlockchainService {
 
       if (!anyContract) {
         throw new Error(
-          `No deployed EscrowVault contracts found. Please deploy contracts.`
+          `No deployed EscrowVault contracts found. Please deploy contracts.`,
         );
       }
 
-      // console.log(`✅ BlockchainService initialized with contract: ${anyContract.address} (${anyContract.feePercent}% base)`);
       return anyContract.address;
     } catch (error) {
-      console.error("Error initializing BlockchainService:", error);
       throw error;
     }
   }
 
   async getVaultForNetwork(network, token = null) {
     try {
-      const desiredFeePercent = Number(0); // Strict, no config fallback
       const query = {
         name: "EscrowVault",
         network: network.toUpperCase(),
-        feePercent: desiredFeePercent,
       };
 
       if (token) {
@@ -109,8 +102,8 @@ class BlockchainService {
       const entry = await ContractModel.findOne(query);
       if (!entry) {
         const errorMsg = token
-          ? `EscrowVault not found for ${token} on ${network} with ${desiredFeePercent}% fee`
-          : `EscrowVault not found on ${network} with ${desiredFeePercent}% fee`;
+          ? `EscrowVault not found for ${token} on ${network}`
+          : `EscrowVault not found on ${network}`;
         throw new Error(errorMsg);
       }
       const wallet = this.wallets[network.toUpperCase()];
@@ -177,119 +170,7 @@ class BlockchainService {
     return await tx.wait();
   }
 
-  async withdrawFees(
-    token = "USDT",
-    network = "BSC",
-    contractAddressOverride = null
-  ) {
-    try {
-      if (network && network.toUpperCase() === "TRON") {
-        const result = await TronService.withdrawFees({
-          token,
-          contractAddress: contractAddressOverride,
-        });
-        // Normalize result format if needed
-        return {
-          success: result.success,
-          transactionHash: result.transactionHash,
-          blockNumber: 0, // TRON tx result might not have block immediately
-          amount: result.amount,
-        };
-      }
-
-      let contractAddress = contractAddressOverride;
-      let vaultContract;
-
-      const wallet = this.wallets[network.toUpperCase()];
-      const provider = this.providers[network.toUpperCase()];
-
-      if (!contractAddress) {
-        const vault = await this.getVaultForNetwork(network, token);
-        contractAddress = await vault.getAddress(); // Ensure we get the actual address from the contract object
-        vaultContract = vault; // Use the already fetched vault object
-      } else {
-        vaultContract = new ethers.Contract(
-          contractAddress,
-          ESCROW_VAULT_ABI,
-          wallet
-        );
-      }
-
-      // Check balance before attempting withdrawal
-      const accumulatedFees = await vaultContract.accumulatedFees();
-
-      // If no fees, skip withdrawal to avoid revert
-      if (accumulatedFees.toString() === "0") {
-        return {
-          success: true,
-          skipped: true,
-          message: "No fees to withdraw",
-        };
-      }
-
-      // Get contract address and check actual token balance
-      const tokenAddress = await vaultContract.token();
-      const tokenContract = new ethers.Contract(
-        tokenAddress,
-        ["function balanceOf(address) view returns (uint256)"],
-        provider
-      );
-
-      const actualBalance = await tokenContract.balanceOf(contractAddress);
-
-      if (actualBalance < accumulatedFees) {
-        const decimals = this.getTokenDecimals(token, network);
-        const accStr = ethers.formatUnits(accumulatedFees, decimals);
-        const balStr = ethers.formatUnits(actualBalance, decimals);
-
-        throw new Error(
-          `Validation Error: no-balance - Contract balance (${balStr}) is less than accumulated fees (${accStr}). Withdrawal would fail.`
-        );
-      }
-
-      const tx = await vaultContract.withdrawFees();
-      const receipt = await tx.wait();
-
-      return {
-        success: true,
-        transactionHash: receipt.hash || receipt.transactionHash,
-        blockNumber: receipt.blockNumber,
-        amount: accumulatedFees,
-      };
-    } catch (error) {
-      const errorMessage = error?.message || "";
-      const errorData = JSON.stringify(error);
-
-      if (
-        errorMessage.includes("BEP20: transfer amount exceeds balance") ||
-        errorData.includes("BEP20: transfer amount exceeds balance")
-      ) {
-        console.warn(
-          `⚠️ Transaction Failed: Contract likely has insufficient balance (transfer exceeds balance).`
-        );
-        throw error;
-      }
-
-      // Suppress validation errors from console (handled by adminHandler)
-      // Also suppress "no-fees" revert if it slips through
-      if (
-        errorMessage.includes("Validation Error") ||
-        errorMessage.includes("no-balance") ||
-        errorMessage.includes("no-fees") ||
-        errorMessage.includes("429") ||
-        errorMessage.includes("Too Many Requests") ||
-        errorMessage.includes("request rate exceeded")
-      ) {
-        throw error;
-      }
-
-      console.error(
-        `Error withdrawing fees for ${token} on ${network}:`,
-        error
-      );
-      throw error;
-    }
-  }
+  // withdrawFees removed - use specific admin withdraw commands via withdrawToken
 
   async refundFunds(
     token,
@@ -298,7 +179,7 @@ class BlockchainService {
     amount,
     amountWeiOverride = null,
     groupId = null,
-    contractAddressOverride = null
+    contractAddressOverride = null,
   ) {
     try {
       if (network && network.toUpperCase() === "TRON") {
@@ -320,14 +201,14 @@ class BlockchainService {
         contractAddress = await this.getEscrowContractAddress(
           token,
           network,
-          groupId
+          groupId,
         );
       }
       if (!contractAddress) {
         throw new Error(
           `No escrow contract found for ${token} on ${network}${
             groupId ? ` for group ${groupId}` : ""
-          }`
+          }`,
         );
       }
 
@@ -336,7 +217,7 @@ class BlockchainService {
       vaultContract = new ethers.Contract(
         contractAddress,
         ESCROW_VAULT_ABI,
-        wallet
+        wallet,
       );
       const decimals = this.getTokenDecimals(token, network);
       amountWei = amountWeiOverride
@@ -351,7 +232,7 @@ class BlockchainService {
           nonce = await provider.getTransactionCount(wallet.address);
         } catch (fallbackError) {
           throw new Error(
-            `Failed to get transaction nonce: ${fallbackError.message}`
+            `Failed to get transaction nonce: ${fallbackError.message}`,
           );
         }
       }
@@ -361,18 +242,18 @@ class BlockchainService {
       const tokenContractForCheck = new ethers.Contract(
         tokenAddressForCheck,
         ["function balanceOf(address) view returns (uint256)"],
-        provider
+        provider,
       );
       const contractBalanceWei = await tokenContractForCheck.balanceOf(
-        contractAddress
+        contractAddress,
       );
 
       if (contractBalanceWei < amountWei) {
         throw new Error(
           `Insufficient Vault Balance: Contract has ${ethers.formatUnits(
             contractBalanceWei,
-            decimals
-          )} but needs ${ethers.formatUnits(amountWei, decimals)}`
+            decimals,
+          )} but needs ${ethers.formatUnits(amountWei, decimals)}`,
         );
       }
 
@@ -404,12 +285,12 @@ class BlockchainService {
 
       if (isNonceError) {
         console.warn(
-          `⚠️ Nonce error detected in refundFunds. Retrying with pending nonce...`
+          `⚠️ Nonce error detected in refundFunds. Retrying with pending nonce...`,
         );
         try {
           const pendingNonce = await provider.getTransactionCount(
             wallet.address,
-            "pending"
+            "pending",
           );
           const tx = await vaultContract.refund(sellerAddress, amountWei, {
             nonce: pendingNonce,
@@ -448,7 +329,7 @@ class BlockchainService {
       const vault = new ethers.Contract(
         contractAddress,
         ESCROW_VAULT_ABI,
-        wallet
+        wallet,
       );
 
       // We need the ERC20 token address that the vault manages
@@ -478,7 +359,7 @@ class BlockchainService {
   async getFeeSettings(
     token = "USDT",
     network = "BSC",
-    contractAddress = null
+    contractAddress = null,
   ) {
     try {
       if (network && network.toUpperCase() === "TRON") {
@@ -491,7 +372,7 @@ class BlockchainService {
           feePercent: result.feePercent,
           accumulated: ethers.formatUnits(
             result.accumulated,
-            this.getTokenDecimals(token, network)
+            this.getTokenDecimals(token, network),
           ),
         };
       }
@@ -504,24 +385,31 @@ class BlockchainService {
         vault = await this.getVaultForNetwork(network, token);
       }
 
-      const [feeWallet, feePercent, accumulated] = await Promise.all([
-        vault.feeWallet(),
-        vault.feePercent(),
-        vault.accumulatedFees(),
-      ]);
+      const feeWallet = await vault.feeWallet();
+
+      // Since we don't have explicit fee accounting, we treat the entire balance as potential fees to sweep
+      // Valid for checking if there's anything to withdraw
+      const tokenAddressForCheck = await vault.token();
+      const tokenContract = new ethers.Contract(
+        tokenAddressForCheck,
+        ["function balanceOf(address) view returns (uint256)"],
+        this.getProvider(network),
+      );
+      const balanceWei = await tokenContract.balanceOf(vault.target); // vault.target for v6 contract instance
 
       return {
         feeWallet,
-        feePercent: Number(feePercent),
+        feePercent: 0,
         accumulated: ethers.formatUnits(
-          accumulated,
-          this.getTokenDecimals(token, network)
+          balanceWei,
+          this.getTokenDecimals(token, network),
         ),
       };
     } catch (error) {
+      // fallback
       console.error(
         `Error fetching fee settings for ${token} on ${network}:`,
-        error
+        error,
       );
       throw error;
     }
@@ -564,7 +452,7 @@ class BlockchainService {
           token,
           network,
           address,
-          startBlock
+          startBlock,
         );
       }
     } catch (error) {
@@ -573,7 +461,7 @@ class BlockchainService {
         token,
         network,
         address,
-        startBlock
+        startBlock,
       );
     }
   }
@@ -647,7 +535,7 @@ class BlockchainService {
           } catch (chunkError) {
             console.error(
               `Error scanning blocks ${currentStart}-${currentEnd}:`,
-              chunkError
+              chunkError,
             );
             currentStart = currentEnd + 1;
           }
@@ -736,7 +624,7 @@ class BlockchainService {
     } catch (error) {
       console.error(
         `Error fetching timestamp for ${txHash} on ${network}:`,
-        error.message
+        error.message,
       );
       return Date.now(); // Fail safe: return current time so we don't block valid txs on RPC errors?
       // Limit logic: if we return Date.now(), diff is 0, so it passes.
@@ -759,7 +647,7 @@ class BlockchainService {
             const tokenAddress = this.getTokenAddress(token, network);
             const balance = await TronService.getTRC20Balance(
               tokenAddress,
-              address
+              address,
             );
             return balance;
           }
@@ -792,7 +680,7 @@ class BlockchainService {
       }
     }
     console.error(
-      `Error getting token balance after 3 attempts: ${lastError.message}`
+      `Error getting token balance after 3 attempts: ${lastError.message}`,
     );
     throw lastError;
   }
@@ -804,7 +692,7 @@ class BlockchainService {
     amount,
     amountWeiOverride = null,
     groupId = null,
-    contractAddressOverride = null
+    contractAddressOverride = null,
   ) {
     let wallet, provider, vaultContract, amountWei, contractAddress;
     try {
@@ -816,7 +704,7 @@ class BlockchainService {
         // Prevent negative amounts from network fee calculation issues
         if (amount < 0) {
           throw new Error(
-            `Invalid Release Amount: ${amount}. Network fee might exceed gross amount.`
+            `Invalid Release Amount: ${amount}. Network fee might exceed gross amount.`,
           );
         }
         amountWei = ethers.parseUnits(amount.toString(), decimals);
@@ -844,14 +732,14 @@ class BlockchainService {
         contractAddress = await this.getEscrowContractAddress(
           token,
           network,
-          groupId
+          groupId,
         );
       }
       if (!contractAddress) {
         throw new Error(
           `No escrow contract found for ${token} on ${network}${
             groupId ? ` for group ${groupId}` : ""
-          }`
+          }`,
         );
       }
 
@@ -864,7 +752,7 @@ class BlockchainService {
       vaultContract = new ethers.Contract(
         contractAddress,
         ESCROW_VAULT_ABI,
-        wallet
+        wallet,
       );
 
       let nonce;
@@ -875,7 +763,7 @@ class BlockchainService {
           nonce = await provider.getTransactionCount(wallet.address);
         } catch (fallbackError) {
           throw new Error(
-            `Failed to get transaction nonce: ${fallbackError.message}`
+            `Failed to get transaction nonce: ${fallbackError.message}`,
           );
         }
       }
@@ -886,18 +774,18 @@ class BlockchainService {
       const tokenContractForCheck = new ethers.Contract(
         tokenAddressForCheck,
         ["function balanceOf(address) view returns (uint256)"],
-        provider
+        provider,
       );
       const contractBalanceWei = await tokenContractForCheck.balanceOf(
-        contractAddress
+        contractAddress,
       );
 
       if (contractBalanceWei < amountWei) {
         throw new Error(
           `Insufficient Vault Balance: Contract has ${ethers.formatUnits(
             contractBalanceWei,
-            decimals
-          )} but needs ${ethers.formatUnits(amountWei, decimals)}`
+            decimals,
+          )} but needs ${ethers.formatUnits(amountWei, decimals)}`,
         );
       }
 
@@ -915,22 +803,22 @@ class BlockchainService {
               () =>
                 reject(
                   new Error(
-                    `Transaction verification timed out (${attempt}/3).`
-                  )
+                    `Transaction verification timed out (${attempt}/3).`,
+                  ),
                 ),
-              60000
-            )
+              60000,
+            ),
           );
           receipt = await Promise.race([waitPromise, timeoutPromise]);
           break; // Success!
         } catch (e) {
           if (attempt === 3) {
             throw new Error(
-              "Transaction verification timed out after 3 attempts (180s). Please check the explorer manually."
+              "Transaction verification timed out after 3 attempts (180s). Please check the explorer manually.",
             );
           }
           console.log(
-            `Verification attempt ${attempt} timed out, continuing to wait...`
+            `Verification attempt ${attempt} timed out, continuing to wait...`,
           );
         }
       }
@@ -953,7 +841,7 @@ class BlockchainService {
         providerMessage.toLowerCase().includes("insufficient funds")
       ) {
         console.error(
-          `Error releasing funds: Insufficient gas balance on ${network}. Details: ${providerMessage}`
+          `Error releasing funds: Insufficient gas balance on ${network}. Details: ${providerMessage}`,
         );
       } else {
       }
@@ -966,7 +854,7 @@ class BlockchainService {
         errorData.includes("BEP20: transfer amount exceeds balance")
       ) {
         console.warn(
-          `⚠️ Release Failed: Contract likely has insufficient balance (transfer exceeds balance).`
+          `⚠️ Release Failed: Contract likely has insufficient balance (transfer exceeds balance).`,
         );
         throw error;
       }
@@ -976,7 +864,7 @@ class BlockchainService {
       if (!errString.includes("Insufficient Vault Balance")) {
         console.error(
           `Error releasing funds on ${network} (token: ${token}, contract: ${contractAddress}, amount: ${amount}):`,
-          error
+          error,
         );
       }
       throw error;
@@ -990,7 +878,7 @@ class BlockchainService {
     amount,
     amountWeiOverride = null,
     groupId = null,
-    contractAddressOverride = null
+    contractAddressOverride = null,
   ) {
     let wallet, provider, vaultContract, amountWei;
     try {
@@ -1014,14 +902,14 @@ class BlockchainService {
         contractAddress = await this.getEscrowContractAddress(
           token,
           network,
-          groupId
+          groupId,
         );
       }
       if (!contractAddress) {
         throw new Error(
           `No escrow contract found for ${token} on ${network}${
             groupId ? ` for group ${groupId}` : ""
-          }`
+          }`,
         );
       }
 
@@ -1034,7 +922,7 @@ class BlockchainService {
       vaultContract = new ethers.Contract(
         contractAddress,
         ESCROW_VAULT_ABI,
-        wallet
+        wallet,
       );
       const decimals = this.getTokenDecimals(token, network);
       amountWei = amountWeiOverride
@@ -1049,7 +937,7 @@ class BlockchainService {
           nonce = await provider.getTransactionCount(wallet.address);
         } catch (fallbackError) {
           throw new Error(
-            `Failed to get transaction nonce: ${fallbackError.message}`
+            `Failed to get transaction nonce: ${fallbackError.message}`,
           );
         }
       }
@@ -1060,18 +948,18 @@ class BlockchainService {
       const tokenContractForCheck = new ethers.Contract(
         tokenAddressForCheck,
         ["function balanceOf(address) view returns (uint256)"],
-        provider
+        provider,
       );
       const contractBalanceWei = await tokenContractForCheck.balanceOf(
-        contractAddress
+        contractAddress,
       );
 
       if (contractBalanceWei < amountWei) {
         throw new Error(
           `Insufficient Vault Balance: Contract has ${ethers.formatUnits(
             contractBalanceWei,
-            decimals
-          )} but needs ${ethers.formatUnits(amountWei, decimals)}`
+            decimals,
+          )} but needs ${ethers.formatUnits(amountWei, decimals)}`,
         );
       }
 
@@ -1089,22 +977,22 @@ class BlockchainService {
               () =>
                 reject(
                   new Error(
-                    `Transaction verification timed out (${attempt}/3).`
-                  )
+                    `Transaction verification timed out (${attempt}/3).`,
+                  ),
                 ),
-              60000
-            )
+              60000,
+            ),
           );
           receipt = await Promise.race([waitPromise, timeoutPromise]);
           break; // Success!
         } catch (e) {
           if (attempt === 3) {
             throw new Error(
-              "Transaction verification timed out after 3 attempts (180s). Please check the explorer manually."
+              "Transaction verification timed out after 3 attempts (180s). Please check the explorer manually.",
             );
           }
           console.log(
-            `Verification attempt ${attempt} timed out, continuing to wait...`
+            `Verification attempt ${attempt} timed out, continuing to wait...`,
           );
         }
       }
@@ -1127,7 +1015,7 @@ class BlockchainService {
         providerMessage.toLowerCase().includes("insufficient funds")
       ) {
         console.error(
-          `Error refunding funds: Insufficient gas balance on ${network}. Details: ${providerMessage}`
+          `Error refunding funds: Insufficient gas balance on ${network}. Details: ${providerMessage}`,
         );
       }
 
@@ -1139,7 +1027,7 @@ class BlockchainService {
         errorData.includes("BEP20: transfer amount exceeds balance")
       ) {
         console.warn(
-          `⚠️ Refund Failed: Contract likely has insufficient balance (transfer exceeds balance).`
+          `⚠️ Refund Failed: Contract likely has insufficient balance (transfer exceeds balance).`,
         );
         throw error;
       }
@@ -1154,21 +1042,6 @@ class BlockchainService {
   async getEscrowContractAddress(token, network, groupId = null) {
     try {
       const desiredFeePercent = Number(0); // Strict, no config fallback
-
-      if (groupId) {
-        const groupContract = await ContractModel.findOne({
-          name: "EscrowVault",
-          token: token.toUpperCase(),
-          network: network.toUpperCase(),
-          // feePercent: desiredFeePercent, // REMOVED: Trust the groupId assignment regardless of fee
-          groupId: groupId,
-          status: "deployed",
-        });
-
-        if (groupContract) {
-          return groupContract.address;
-        }
-      }
 
       const contract = await ContractModel.findOne({
         name: "EscrowVault",
@@ -1201,7 +1074,7 @@ class BlockchainService {
       const vaultContract = new ethers.Contract(
         contractAddress,
         ESCROW_VAULT_ABI,
-        wallet
+        wallet,
       );
       const decimals = this.getTokenDecimals(token, network);
       const amountWei = ethers.parseUnits(amount.toString(), decimals);
@@ -1219,7 +1092,7 @@ class BlockchainService {
           nonce = await provider.getTransactionCount(wallet.address);
         } catch (fallbackError) {
           throw new Error(
-            `Failed to get transaction nonce: ${fallbackError.message}`
+            `Failed to get transaction nonce: ${fallbackError.message}`,
           );
         }
       }

@@ -29,7 +29,7 @@ async function updateTradeStartedMessage(
   escrow,
   telegram,
   status,
-  transactionHash = null
+  transactionHash = null,
 ) {
   try {
     if (!escrow.originChatId || !escrow.tradeStartedMessageId) {
@@ -50,7 +50,7 @@ async function updateTradeStartedMessage(
     const tradeStart = escrow.tradeStartTime || escrow.createdAt || new Date();
     const minutesTaken = Math.max(
       1,
-      Math.round((Date.now() - new Date(tradeStart)) / (60 * 1000))
+      Math.round((Date.now() - new Date(tradeStart)) / (60 * 1000)),
     );
 
     let amount = 0;
@@ -96,8 +96,8 @@ async function updateTradeStartedMessage(
           escrow.tradeStartedMessageId,
           null,
           updatedMessage,
-          { parse_mode: "HTML" }
-        )
+          { parse_mode: "HTML" },
+        ),
       );
     } catch (e) {
       const description =
@@ -146,7 +146,7 @@ async function scheduleGroupRecycling(escrowId, telegram) {
         const allUsersRemoved = await GroupPoolService.removeUsersFromGroup(
           finalEscrow,
           group.groupId,
-          telegram
+          telegram,
         );
 
         if (allUsersRemoved) {
@@ -155,7 +155,7 @@ async function scheduleGroupRecycling(escrowId, telegram) {
           } catch (refreshError) {
             console.error(
               "Error refreshing invite link during recycling:",
-              refreshError
+              refreshError,
             );
           }
 
@@ -168,7 +168,7 @@ async function scheduleGroupRecycling(escrowId, telegram) {
           try {
             await telegram.sendMessage(
               finalEscrow.groupId,
-              "✅ Group has been recycled and is ready for a new trade."
+              "✅ Group has been recycled and is ready for a new trade.",
             );
           } catch (sendError) {
             console.error("Error sending recycled notification:", sendError);
@@ -183,12 +183,12 @@ async function scheduleGroupRecycling(escrowId, telegram) {
           try {
             await telegram.sendMessage(
               finalEscrow.groupId,
-              "✅ Trade closed successfully! Both parties have confirmed. Note: Some users could not be removed from the group."
+              "✅ Trade closed successfully! Both parties have confirmed. Note: Some users could not be removed from the group.",
             );
           } catch (sendError) {
             console.error(
               "Error sending partial recycling notification:",
-              sendError
+              sendError,
             );
           }
         }
@@ -196,7 +196,7 @@ async function scheduleGroupRecycling(escrowId, telegram) {
         try {
           await telegram.sendMessage(
             finalEscrow.groupId,
-            "✅ Trade closed successfully! Both parties have confirmed."
+            "✅ Trade closed successfully! Both parties have confirmed.",
           );
         } catch (sendError) {
           console.error("Error sending completion notification:", sendError);
@@ -231,7 +231,7 @@ async function recycleGroupImmediately(escrow, telegram) {
     const allUsersRemoved = await GroupPoolService.removeUsersFromGroup(
       escrow,
       group.groupId,
-      telegram
+      telegram,
     );
 
     if (allUsersRemoved) {
@@ -240,7 +240,7 @@ async function recycleGroupImmediately(escrow, telegram) {
       } catch (refreshError) {
         console.error(
           "Error refreshing invite link during immediate recycle:",
-          refreshError
+          refreshError,
         );
       }
 
@@ -294,7 +294,7 @@ async function updateRoleSelectionMessage(ctx, escrow) {
       const label = formatParticipant(
         participant,
         index === 0 ? "Participant 1" : "Participant 2",
-        { html: true }
+        { html: true },
       );
       const isBuyer =
         participant.id !== null &&
@@ -319,23 +319,23 @@ async function updateRoleSelectionMessage(ctx, escrow) {
         escrow,
         escrow.buyerId,
         "Buyer",
-        { html: true }
+        { html: true },
       );
       const sellerLabel = formatParticipantById(
         escrow,
         escrow.sellerId,
         "Seller",
-        { html: true }
+        { html: true },
       );
       statusLines.push(
         escrow.buyerId
           ? `✅ ${buyerLabel} - BUYER`
-          : `⏳ ${buyerLabel} - Waiting...`
+          : `⏳ ${buyerLabel} - Waiting...`,
       );
       statusLines.push(
         escrow.sellerId
           ? `✅ ${sellerLabel} - SELLER`
-          : `⏳ ${sellerLabel} - Waiting...`
+          : `⏳ ${sellerLabel} - Waiting...`,
       );
     }
 
@@ -372,8 +372,8 @@ async function updateRoleSelectionMessage(ctx, escrow) {
           escrow.roleSelectionMessageId,
           null,
           messageText,
-          { reply_markup: replyMarkup, parse_mode: "HTML" }
-        )
+          { reply_markup: replyMarkup, parse_mode: "HTML" },
+        ),
       );
     } catch (editError) {
       const description =
@@ -394,7 +394,7 @@ const safeEditMessageText = async (
   chatId,
   messageId,
   text,
-  extra = {}
+  extra = {},
 ) => {
   try {
     await ctx.telegram.editMessageText(
@@ -402,7 +402,7 @@ const safeEditMessageText = async (
       messageId,
       undefined,
       text,
-      extra
+      extra,
     );
   } catch (error) {
     if (
@@ -419,7 +419,7 @@ const safeEditMessageText = async (
       const retryAfter = error.parameters?.retry_after || 5;
       if (retryAfter < 30) {
         await new Promise((resolve) =>
-          setTimeout(resolve, retryAfter * 1000 + 1000)
+          setTimeout(resolve, retryAfter * 1000 + 1000),
         );
         try {
           await ctx.telegram.editMessageText(
@@ -427,7 +427,7 @@ const safeEditMessageText = async (
             messageId,
             undefined,
             text,
-            extra
+            extra,
           );
         } catch (retryErr) {
           console.error(`Rate limit retry failed: ${retryErr.message}`);
@@ -454,7 +454,7 @@ module.exports = async (ctx) => {
       const isBuyer = callbackData === "select_role_buyer";
       await safeAnswerCbQuery(
         ctx,
-        isBuyer ? "Buyer role selected" : "Seller role selected"
+        isBuyer ? "Buyer role selected" : "Seller role selected",
       );
 
       const escrow = await findGroupEscrow(chatId, [
@@ -538,7 +538,7 @@ module.exports = async (ctx) => {
                 [{ text: "BSC", callback_data: "step2_select_chain_BSC" }],
               ],
             },
-          }
+          },
         );
         escrow.step2MessageId = step2Msg.message_id;
         await escrow.save();
@@ -556,7 +556,7 @@ module.exports = async (ctx) => {
         ["draft", "awaiting_details"],
         {
           tradeDetailsStep: "step2_blockchain",
-        }
+        },
       );
 
       if (!escrow) {
@@ -589,7 +589,7 @@ module.exports = async (ctx) => {
             escrow.groupId,
             escrow.step2MessageId,
             null,
-            { inline_keyboard: [buttons] }
+            { inline_keyboard: [buttons] },
           );
         } catch (err) {
           // Ignore if message not modified
@@ -611,7 +611,7 @@ module.exports = async (ctx) => {
               })),
             ],
           },
-        }
+        },
       );
       escrow.step3MessageId = step3Msg.message_id;
       escrow.tradeDetailsStep = "step3_coin";
@@ -628,7 +628,7 @@ module.exports = async (ctx) => {
         ["draft", "awaiting_details"],
         {
           tradeDetailsStep: "step3_coin",
-        }
+        },
       );
 
       if (!escrow) {
@@ -647,7 +647,7 @@ module.exports = async (ctx) => {
       if (!validCoins.includes(coin)) {
         await safeAnswerCbQuery(
           ctx,
-          `❌ ${coin} is not supported on ${currentChain}`
+          `❌ ${coin} is not supported on ${currentChain}`,
         );
         return;
       }
@@ -674,7 +674,7 @@ module.exports = async (ctx) => {
             escrow.groupId,
             escrow.step3MessageId,
             null,
-            { inline_keyboard: [buttons] }
+            { inline_keyboard: [buttons] },
           );
         } catch (err) {
           // Ignore if message not modified
@@ -688,7 +688,7 @@ module.exports = async (ctx) => {
         {
           caption: `💰 <b>Step 4 - Enter ${coin} Amount</b>\n\nChain: ${escrow.chain}\nNetwork Fee: ${escrow.networkFee} ${coin}\n\nEnter amount including fee → Example: 1000`,
           parse_mode: "HTML",
-        }
+        },
       );
       escrow.step4MessageId = step4Msg.message_id;
       escrow.tradeDetailsStep = "step4_amount";
@@ -715,21 +715,23 @@ module.exports = async (ctx) => {
 
       if (group && group.contracts) {
         // BSC Button
-        if (group.contracts.has(selectedToken)) {
+        // Access map safely
+        if (group.contracts.get(selectedToken)) {
           buttons.push(
             Markup.button.callback(
               "BSC / BEP20",
-              `set_chain_${selectedToken}_BSC`
-            )
+              `set_chain_${selectedToken}_BSC`,
+            ),
           );
         }
         // TRON Button (Only for USDT usually)
-        if (selectedToken === "USDT" && group.contracts.has("USDT_TRON")) {
+        // Access map safely
+        if (selectedToken === "USDT" && group.contracts.get("USDT_TRON")) {
           buttons.push(
             Markup.button.callback(
               "TRON / TRC20",
-              `set_chain_${selectedToken}_TRON`
-            )
+              `set_chain_${selectedToken}_TRON`,
+            ),
           );
         }
       }
@@ -739,8 +741,8 @@ module.exports = async (ctx) => {
         buttons.push(
           Markup.button.callback(
             "BSC / BEP20",
-            `set_chain_${selectedToken}_BSC`
-          )
+            `set_chain_${selectedToken}_BSC`,
+          ),
         );
       }
 
@@ -750,7 +752,7 @@ module.exports = async (ctx) => {
         {
           parse_mode: "HTML",
           reply_markup: Markup.inlineKeyboard([buttons]).reply_markup,
-        }
+        },
       );
       await escrow.save();
       return;
@@ -777,29 +779,25 @@ module.exports = async (ctx) => {
       }
 
       const group = await GroupPool.findOne({ groupId: escrow.groupId });
-      let contractInfo = null;
+      let addressInfo = null;
 
-      if (
-        group &&
-        group.contracts &&
-        group.contracts.get(internalContractKey)
-      ) {
-        contractInfo = group.contracts.get(internalContractKey);
-      } else if (chainKey === "BSC" && group.contractAddress) {
-        contractInfo = {
-          address: group.contractAddress,
-          feePercent: group.feePercent,
-          network: "BSC",
-        };
+      if (group && group.contracts) {
+        const c = group.contracts.get(internalContractKey);
+        if (c && c.address) {
+          addressInfo = c.address;
+        }
       }
 
-      if (!contractInfo || !contractInfo.address) {
+      // NOTE: Legacy `group.contractAddress` field has been removed.
+      // All contracts are now stored in the `contracts` Map.
+
+      if (!addressInfo) {
         return ctx.reply(`❌ ${tokenKey} on ${chainKey} is not supported.`);
       }
 
       escrow.token = tokenKey;
       escrow.chain = chainKey === "TRON" ? "TRON" : "BSC";
-      escrow.contractAddress = contractInfo.address;
+      escrow.contractAddress = addressInfo;
 
       // Network Fee Logic (using centralized config)
       const hasBioTag = escrow.feeRate !== undefined && escrow.feeRate < 0.75;
@@ -813,7 +811,7 @@ module.exports = async (ctx) => {
         {
           caption: `💰 <b>Step 2 - Enter ${tokenKey} Amount</b>\n\nChain: ${escrow.chain}\nNetwork Fee: ${escrow.networkFee} ${tokenKey}\n\nEnter amount including fee → Example: 1000`,
           parse_mode: "HTML",
-        }
+        },
       );
       escrow.step1MessageId = step1Msg.message_id;
 
@@ -842,7 +840,7 @@ module.exports = async (ctx) => {
       ) {
         await safeAnswerCbQuery(
           ctx,
-          "✅ This deal has already been processed."
+          "✅ This deal has already been processed.",
         );
         return;
       }
@@ -851,7 +849,7 @@ module.exports = async (ctx) => {
       if (!anyEscrow) {
         await safeAnswerCbQuery(
           ctx,
-          "✅ This deal summary is no longer active."
+          "✅ This deal summary is no longer active.",
         );
         return;
       }
@@ -860,14 +858,14 @@ module.exports = async (ctx) => {
       const escrow = await findGroupEscrow(
         chatId,
         ["draft", "awaiting_details"],
-        { dealSummaryMessageId: { $exists: true } }
+        { dealSummaryMessageId: { $exists: true } },
       );
 
       // Final check (shouldn't happen, but safety net)
       if (!escrow) {
         await safeAnswerCbQuery(
           ctx,
-          "✅ This deal summary is no longer active."
+          "✅ This deal summary is no longer active.",
         );
         return;
       }
@@ -889,7 +887,7 @@ module.exports = async (ctx) => {
       ) {
         return safeAnswerCbQuery(
           ctx,
-          "✅ You have already approved this deal."
+          "✅ You have already approved this deal.",
         );
       }
 
@@ -968,7 +966,7 @@ ${approvalStatus}`;
           updatedEscrow.dealSummaryMessageId,
           null,
           summaryText,
-          { parse_mode: "HTML", reply_markup: replyMarkup }
+          { parse_mode: "HTML", reply_markup: replyMarkup },
         );
       } catch (captionError) {
         const description =
@@ -992,7 +990,7 @@ ${approvalStatus}`;
               updatedEscrow.dealSummaryMessageId,
               null,
               summaryText,
-              { parse_mode: "HTML", reply_markup: replyMarkup }
+              { parse_mode: "HTML", reply_markup: replyMarkup },
             );
           } catch (textError) {
             // If both fail, try sending new message with image
@@ -1004,7 +1002,7 @@ ${approvalStatus}`;
                   caption: summaryText,
                   parse_mode: "HTML",
                   reply_markup: replyMarkup,
-                }
+                },
               );
             } catch (sendErr) {
               console.error("Error updating deal summary:", textError);
@@ -1065,7 +1063,7 @@ ${approvalStatus}`;
           {
             caption: confirmedText,
             parse_mode: "HTML",
-          }
+          },
         );
 
         // Pin the DEAL CONFIRMED message
@@ -1075,7 +1073,7 @@ ${approvalStatus}`;
             await ctx.telegram.pinChatMessage(
               updatedEscrow.groupId,
               confirmedMsg.message_id,
-              { disable_notification: true }
+              { disable_notification: true },
             );
             break; // Success
           } catch (pinErr) {
@@ -1091,7 +1089,7 @@ ${approvalStatus}`;
 
             if (!isRateLimit || attempt === 3) {
               console.warn(
-                `Failed to pin message: ${pinErr.message} (Attempt ${attempt}/3)`
+                `Failed to pin message: ${pinErr.message} (Attempt ${attempt}/3)`,
               );
             }
           }
@@ -1103,7 +1101,7 @@ ${approvalStatus}`;
         try {
           // Normalize chain to network (BNB -> BSC, etc.)
           const network = AddressAssignmentService.normalizeChainToNetwork(
-            updatedEscrow.chain
+            updatedEscrow.chain,
           );
 
           const addressInfo =
@@ -1113,7 +1111,7 @@ ${approvalStatus}`;
               network,
               updatedEscrow.quantity,
               0, // No longer using config.ESCROW_FEE_PERCENT for deposit address assignment
-              updatedEscrow.groupId // Pass groupId explicitly
+              updatedEscrow.groupId, // Pass groupId explicitly
             );
 
           updatedEscrow.depositAddress = addressInfo.address;
@@ -1153,13 +1151,13 @@ Once you’ve sent the amount, tap the button below.`;
                   ],
                 ],
               },
-            }
+            },
           );
         } catch (depositErr) {
           console.error("Error generating deposit address:", depositErr);
           await ctx.telegram.sendMessage(
             updatedEscrow.groupId,
-            "❌ Error generating deposit address. Please contact admin."
+            "❌ Error generating deposit address. Please contact admin.",
           );
         }
       }
@@ -1175,7 +1173,7 @@ Once you’ve sent the amount, tap the button below.`;
       const escrow = await findGroupEscrow(
         chatId,
         ["draft", "awaiting_details"],
-        { tradeDetailsStep: "step4_chain_coin" }
+        { tradeDetailsStep: "step4_chain_coin" },
       );
 
       if (!escrow) {
@@ -1191,7 +1189,7 @@ Once you’ve sent the amount, tap the button below.`;
         // If we are already at address step or completed, ignore this
         if (
           ["step5_buyer_address", "step6_seller_address", "completed"].includes(
-            escrow.tradeDetailsStep
+            escrow.tradeDetailsStep,
           )
         ) {
           await safeAnswerCbQuery(ctx, "✅ Step already completed.");
@@ -1222,7 +1220,7 @@ Once you’ve sent the amount, tap the button below.`;
             null,
             {
               inline_keyboard: [buttons],
-            }
+            },
           );
         } catch (err) {
           const description = err?.response?.description || err?.message || "";
@@ -1250,7 +1248,7 @@ Once you’ve sent the amount, tap the button below.`;
                 })),
               ],
             },
-          }
+          },
         );
         escrow.step4CoinMessageId = coinMsg.message_id;
         await escrow.save();
@@ -1269,7 +1267,7 @@ Once you’ve sent the amount, tap the button below.`;
       const escrow = await findGroupEscrow(
         chatId,
         ["draft", "awaiting_details"],
-        { tradeDetailsStep: "step4_chain_coin" }
+        { tradeDetailsStep: "step4_chain_coin" },
       );
 
       if (!escrow) {
@@ -1281,7 +1279,7 @@ Once you’ve sent the amount, tap the button below.`;
       if (escrow.tradeDetailsStep !== "step4_chain_coin") {
         if (
           ["step5_buyer_address", "step6_seller_address", "completed"].includes(
-            escrow.tradeDetailsStep
+            escrow.tradeDetailsStep,
           )
         ) {
           await safeAnswerCbQuery(ctx, "✅ Step already completed.");
@@ -1301,10 +1299,10 @@ Once you’ve sent the amount, tap the button below.`;
       if (!validCoins.includes(coin)) {
         await safeAnswerCbQuery(
           ctx,
-          `❌ ${coin} is not supported on ${currentChain}`
+          `❌ ${coin} is not supported on ${currentChain}`,
         );
         console.warn(
-          `Invalid coin selection blocked: ${coin} on ${currentChain} (Escrow: ${escrow.escrowId})`
+          `Invalid coin selection blocked: ${coin} on ${currentChain} (Escrow: ${escrow.escrowId})`,
         );
         return;
       }
@@ -1330,7 +1328,7 @@ Once you’ve sent the amount, tap the button below.`;
             null,
             {
               inline_keyboard: [buttons],
-            }
+            },
           );
         } catch (err) {
           const description = err?.response?.description || err?.message || "";
@@ -1371,7 +1369,7 @@ Once you’ve sent the amount, tap the button below.`;
           images.ENTER_ADDRESS,
           {
             caption: addressExample,
-          }
+          },
         );
         updatedEscrow.step5BuyerAddressMessageId = step5Msg.message_id;
         await updatedEscrow.save();
@@ -1397,7 +1395,7 @@ Once you’ve sent the amount, tap the button below.`;
       if (!isBuyer && !isSeller && !isAdmin) {
         return safeAnswerCbQuery(
           ctx,
-          "❌ Only buyer, seller, or admin can close this trade."
+          "❌ Only buyer, seller, or admin can close this trade.",
         );
       }
 
@@ -1405,7 +1403,7 @@ Once you’ve sent the amount, tap the button below.`;
       if (escrow.status !== "completed" && escrow.status !== "refunded") {
         return safeAnswerCbQuery(
           ctx,
-          "❌ Trade must be completed or refunded before closing."
+          "❌ Trade must be completed or refunded before closing.",
         );
       }
 
@@ -1414,7 +1412,7 @@ Once you’ve sent the amount, tap the button below.`;
         try {
           await ctx.telegram.unpinChatMessage(
             escrow.groupId,
-            escrow.dealConfirmedMessageId
+            escrow.dealConfirmedMessageId,
           );
         } catch (_) {}
         escrow.dealConfirmedMessageId = undefined;
@@ -1427,7 +1425,7 @@ Once you’ve sent the amount, tap the button below.`;
       try {
         await ctx.telegram.sendMessage(
           escrow.groupId,
-          "✅ Trade closed successfully! Group has been recycled and is ready for the next deal."
+          "✅ Trade closed successfully! Group has been recycled and is ready for the next deal.",
         );
       } catch (notifyError) {
         console.error("Error notifying group recycle completion:", notifyError);
@@ -1451,7 +1449,7 @@ Once you’ve sent the amount, tap the button below.`;
       if (escrow.sellerId !== userId) {
         return safeAnswerCbQuery(
           ctx,
-          "❌ Only the seller can click SENT button."
+          "❌ Only the seller can click SENT button.",
         );
       }
 
@@ -1461,7 +1459,7 @@ Once you’ve sent the amount, tap the button below.`;
         : "Seller";
       const askTxMsg = await ctx.telegram.sendMessage(
         escrow.groupId,
-        `✉️ ${sellerUsername} kindly paste the transaction hash or explorer link.`
+        `✉️ ${sellerUsername} kindly paste the transaction hash or explorer link.`,
       );
       escrow.transactionHashMessageId = askTxMsg.message_id;
       await escrow.save();
@@ -1491,13 +1489,13 @@ Once you’ve sent the amount, tap the button below.`;
         escrow.token,
         escrow.chain,
         checkAddress,
-        lastCheckedBlock
+        lastCheckedBlock,
       );
       if (!txs || txs.length === 0) {
         txs = await BlockchainService.getTokenTransactions(
           escrow.token,
           escrow.chain,
-          checkAddress
+          checkAddress,
         );
       }
 
@@ -1527,7 +1525,7 @@ Once you’ve sent the amount, tap the button below.`;
         if (
           escrow.partialTransactionHashes &&
           escrow.partialTransactionHashes.some(
-            (h) => h.toLowerCase() === hash.toLowerCase()
+            (h) => h.toLowerCase() === hash.toLowerCase(),
           )
         ) {
           return false;
@@ -1538,7 +1536,7 @@ Once you’ve sent the amount, tap the button below.`;
 
       const newAmount = newDeposits.reduce(
         (sum, tx) => sum + Number(tx.valueDecimal),
-        0
+        0,
       );
       const previousAmount = escrow.depositAmount;
       const totalAmount = previousAmount + newAmount;
@@ -1547,7 +1545,7 @@ Once you’ve sent the amount, tap the button below.`;
         // Track last checked block from RPC
         try {
           const latest = await BlockchainService.getLatestBlockNumber(
-            escrow.chain
+            escrow.chain,
           );
           if (latest) escrow.lastCheckedBlock = latest;
         } catch {}
@@ -1579,7 +1577,7 @@ Once you’ve sent the amount, tap the button below.`;
         await escrow.save();
 
         await ctx.reply(
-          `✅ Deposit confirmed: ${newAmount.toFixed(2)} ${escrow.token}`
+          `✅ Deposit confirmed: ${newAmount.toFixed(2)} ${escrow.token}`,
         );
 
         // Begin fiat transfer handshake
@@ -1597,16 +1595,16 @@ Once you’ve sent the amount, tap the button below.`;
                 [
                   Markup.button.callback(
                     "✅ I have sent the money",
-                    `fiat_sent_buyer_${escrow.escrowId}`
+                    `fiat_sent_buyer_${escrow.escrowId}`,
                   ),
                 ],
               ]).reply_markup,
-            }
+            },
           );
         }
       } else {
         await ctx.reply(
-          "❌ No new deposit found yet. Please try again in a moment."
+          "❌ No new deposit found yet. Please try again in a moment.",
         );
       }
     } else if (callbackData.startsWith("fiat_sent_buyer_")) {
@@ -1650,21 +1648,21 @@ Once you’ve sent the amount, tap the button below.`;
               [
                 Markup.button.callback(
                   "✅ Yes, I received",
-                  `fiat_received_seller_yes_${escrow.escrowId}`
+                  `fiat_received_seller_yes_${escrow.escrowId}`,
                 ),
                 Markup.button.callback(
                   "❌ No, not received",
-                  `fiat_received_seller_no_${escrow.escrowId}`
+                  `fiat_received_seller_no_${escrow.escrowId}`,
                 ),
               ],
               [
                 Markup.button.callback(
                   "⚠️ Received less money",
-                  `fiat_received_seller_partial_${escrow.escrowId}`
+                  `fiat_received_seller_partial_${escrow.escrowId}`,
                 ),
               ],
             ]).reply_markup,
-          }
+          },
         );
       } catch (error) {
         console.error("❌ Error in fiat_sent_buyer handler:", error);
@@ -1673,7 +1671,7 @@ Once you’ve sent the amount, tap the button below.`;
     } else if (callbackData.startsWith("fiat_received_seller_partial_")) {
       const escrowId = callbackData.replace(
         "fiat_received_seller_partial_",
-        ""
+        "",
       );
       await safeAnswerCbQuery(ctx, "⚠️ Partial payment noted");
 
@@ -1685,14 +1683,14 @@ Once you’ve sent the amount, tap the button below.`;
       if (escrow) {
         try {
           const admins = (config.getAllAdminUsernames?.() || []).filter(
-            Boolean
+            Boolean,
           );
           const adminMentions = admins.length
             ? admins.map((u) => `@${u}`).join(" ")
             : "Admin";
           await ctx.telegram.sendMessage(
             escrow.groupId,
-            `⚠️ Seller reported partial fiat payment for escrow ${escrowId}. ${adminMentions} please review and resolve.`
+            `⚠️ Seller reported partial fiat payment for escrow ${escrowId}. ${adminMentions} please review and resolve.`,
           );
         } catch (e) {
           console.error("Error sending admin notification:", e);
@@ -1730,7 +1728,7 @@ Once you’ve sent the amount, tap the button below.`;
         await announceAndScheduleRecycling(
           escrow,
           ctx,
-          "✅ Buyer confirmed receipt of tokens. Trade completed successfully! Group will be recycled in 5 minutes."
+          "✅ Buyer confirmed receipt of tokens. Trade completed successfully! Group will be recycled in 5 minutes.",
         );
       } else {
         await safeAnswerCbQuery(ctx, "⚠️ Issue reported.");
@@ -1742,7 +1740,7 @@ Once you’ve sent the amount, tap the button below.`;
           escrow.groupId,
           `⚠️ Buyer reported not receiving tokens for escrow ${escrowId}. Transaction hash: ${
             escrow.releaseTransactionHash || "N/A"
-          }. ${adminMentions} please review.`
+          }. ${adminMentions} please review.`,
         );
       }
       return;
@@ -1779,14 +1777,14 @@ Once you’ve sent the amount, tap the button below.`;
         // Notify admins
         try {
           const admins = (config.getAllAdminUsernames?.() || []).filter(
-            Boolean
+            Boolean,
           );
           const adminMentions = admins.length
             ? admins.map((u) => `@${u}`).join(" ")
             : "Admin";
           await ctx.telegram.sendMessage(
             escrow.groupId,
-            `🚨 Seller reported no fiat received for escrow ${escrowId}. ${adminMentions} please review and resolve.`
+            `🚨 Seller reported no fiat received for escrow ${escrowId}. ${adminMentions} please review and resolve.`,
           );
         } catch (e) {
           console.error("Error sending admin notification:", e);
@@ -1806,15 +1804,15 @@ Once you’ve sent the amount, tap the button below.`;
               [
                 Markup.button.callback(
                   "✅ Confirm release",
-                  `fiat_release_confirm_${escrow.escrowId}`
+                  `fiat_release_confirm_${escrow.escrowId}`,
                 ),
                 Markup.button.callback(
                   "❌ Cancel",
-                  `fiat_release_cancel_${escrow.escrowId}`
+                  `fiat_release_cancel_${escrow.escrowId}`,
                 ),
               ],
             ]).reply_markup,
-          }
+          },
         );
       } catch (e) {
         const confirmMsg = await ctx.reply(
@@ -1824,15 +1822,15 @@ Once you’ve sent the amount, tap the button below.`;
               [
                 Markup.button.callback(
                   "✅ Confirm release",
-                  `fiat_release_confirm_${escrow.escrowId}`
+                  `fiat_release_confirm_${escrow.escrowId}`,
                 ),
                 Markup.button.callback(
                   "❌ Cancel",
-                  `fiat_release_cancel_${escrow.escrowId}`
+                  `fiat_release_cancel_${escrow.escrowId}`,
                 ),
               ],
             ]).reply_markup,
-          }
+          },
         );
       }
     } else if (callbackData.startsWith("release_confirm_no_")) {
@@ -1887,7 +1885,7 @@ Once you’ve sent the amount, tap the button below.`;
       if (!isBuyer && !isSeller && !isAdmin) {
         return safeAnswerCbQuery(
           ctx,
-          "❌ Only buyer, seller, or admin can decline."
+          "❌ Only buyer, seller, or admin can decline.",
         );
       }
 
@@ -1912,7 +1910,7 @@ Once you’ve sent the amount, tap the button below.`;
           escrow.releaseConfirmationMessageId,
           null,
           "❎ Release cancelled. No action taken.",
-          { parse_mode: "HTML" }
+          { parse_mode: "HTML" },
         );
       } catch (e) {
         try {
@@ -1957,7 +1955,7 @@ Once you’ve sent the amount, tap the button below.`;
       if (!isAdmin) {
         return safeAnswerCbQuery(
           ctx,
-          "❌ Only admin can cancel admin release."
+          "❌ Only admin can cancel admin release.",
         );
       }
 
@@ -1973,12 +1971,12 @@ Once you’ve sent the amount, tap the button below.`;
           escrow.releaseConfirmationMessageId,
           null,
           "❎ Admin release cancelled. No action taken.",
-          { parse_mode: "HTML" }
+          { parse_mode: "HTML" },
         );
       } catch (e) {
         try {
           await ctx.editMessageText(
-            "❎ Admin release cancelled. No action taken."
+            "❎ Admin release cancelled. No action taken.",
           );
         } catch (e2) {}
       }
@@ -2011,7 +2009,7 @@ Once you’ve sent the amount, tap the button below.`;
       ) {
         return safeAnswerCbQuery(
           ctx,
-          "❌ This release confirmation is no longer valid or has already been processed."
+          "❌ This release confirmation is no longer valid or has already been processed.",
         );
       }
 
@@ -2028,7 +2026,7 @@ Once you’ve sent the amount, tap the button below.`;
       if (!isAdmin) {
         return safeAnswerCbQuery(
           ctx,
-          "❌ Only admin can confirm admin release."
+          "❌ Only admin can confirm admin release.",
         );
       }
 
@@ -2043,7 +2041,7 @@ Once you’ve sent the amount, tap the button below.`;
 
       const decimals = BlockchainService.getTokenDecimals(
         updatedEscrow.token,
-        updatedEscrow.chain
+        updatedEscrow.chain,
       );
       const totalDepositedWei =
         updatedEscrow.accumulatedDepositAmountWei &&
@@ -2054,7 +2052,7 @@ Once you’ve sent the amount, tap the button below.`;
         updatedEscrow.accumulatedDepositAmount ||
           updatedEscrow.depositAmount ||
           updatedEscrow.confirmedAmount ||
-          0
+          0,
       );
       const formattedTotalDeposited = totalDepositedWei
         ? Number(ethers.formatUnits(BigInt(totalDepositedWei), decimals))
@@ -2063,7 +2061,7 @@ Once you’ve sent the amount, tap the button below.`;
       if (!updatedEscrow.buyerAddress || totalDeposited <= 0) {
         return safeAnswerCbQuery(
           ctx,
-          "❌ Cannot release funds: missing buyer address or zero amount."
+          "❌ Cannot release funds: missing buyer address or zero amount.",
         );
       }
 
@@ -2107,33 +2105,48 @@ Once you’ve sent the amount, tap the button below.`;
         }
       }
 
-      // Send (gross - networkFee) to contract, contract will deduct service fee
+      // Send (gross - networkFee - serviceFee) to contract
       const networkFee = updatedEscrow.networkFee || 0;
+      const feeRateVal =
+        typeof updatedEscrow.feeRate === "number"
+          ? updatedEscrow.feeRate
+          : 0.75;
+
       const amountToContract = releaseAmount - networkFee;
+
+      // Calculate Service Fee off-chain
+      const serviceFee = (amountToContract * feeRateVal) / 100;
+      const netAmount = amountToContract - serviceFee;
+
+      if (netAmount <= 0) {
+        throw new Error(
+          `Net amount after fees is too low/negative: ${netAmount}`,
+        );
+      }
 
       const releaseResult = await BlockchainService.releaseFunds(
         updatedEscrow.token,
         updatedEscrow.chain,
         updatedEscrow.buyerAddress,
-        amountToContract,
-        null,
+        netAmount,
+        null, // AmountWeiOverride not straightforward with manual fee deduction, rely on auto-calc or re-calc if needed
         updatedEscrow.groupId,
-        updatedEscrow.contractAddress
+        updatedEscrow.contractAddress,
       );
 
       if (releaseAmount > formattedTotalDeposited) {
         return safeAnswerCbQuery(
           ctx,
           `❌ Release amount exceeds available balance (${formattedTotalDeposited.toFixed(
-            5
-          )} ${updatedEscrow.token}).`
+            5,
+          )} ${updatedEscrow.token}).`,
         );
       }
 
       if (releaseAmount <= 0) {
         return safeAnswerCbQuery(
           ctx,
-          "❌ Release amount must be greater than 0."
+          "❌ Release amount must be greater than 0.",
         );
       }
 
@@ -2148,11 +2161,11 @@ Once you’ve sent the amount, tap the button below.`;
         try {
           const releaseAmountWei = ethers.parseUnits(
             releaseAmount.toFixed(decimals),
-            decimals
+            decimals,
           );
           const totalDepositedAmountWei = ethers.parseUnits(
             formattedTotalDeposited.toFixed(decimals),
-            decimals
+            decimals,
           );
           const proportionalWei =
             (BigInt(totalDepositedWei) * BigInt(releaseAmountWei)) /
@@ -2188,7 +2201,7 @@ Once you’ve sent the amount, tap the button below.`;
 
         if (amountToRelease <= 0) {
           throw new Error(
-            `Release amount (${amountToRelease}) after network fee (${networkFee}) is <= 0`
+            `Release amount (${amountToRelease}) after network fee (${networkFee}) is <= 0`,
           );
         }
 
@@ -2199,7 +2212,7 @@ Once you’ve sent the amount, tap the button below.`;
           amountToRelease,
           amountWeiOverride,
           updatedEscrow.groupId,
-          updatedEscrow.contractAddress // Pass contract address override
+          updatedEscrow.contractAddress, // Pass contract address override
         );
 
         if (!releaseResult || !releaseResult.success) {
@@ -2208,13 +2221,13 @@ Once you’ve sent the amount, tap the button below.`;
 
         if (!releaseResult.transactionHash) {
           throw new Error(
-            "Release transaction succeeded but no transaction hash returned"
+            "Release transaction succeeded but no transaction hash returned",
           );
         }
 
         updatedEscrow.releaseTransactionHash = releaseResult.transactionHash;
         updatedEscrow.partialReleaseTransactionHashes.push(
-          releaseResult.transactionHash
+          releaseResult.transactionHash,
         );
 
         const isPartialRelease =
@@ -2281,7 +2294,7 @@ Amount Released: ${releaseAmount.toFixed(5)} ${updatedEscrow.token}
 ${
   isPartialRelease && !isActuallyFullRelease
     ? `Remaining Balance: ${(formattedTotalDeposited - releaseAmount).toFixed(
-        5
+        5,
       )} ${updatedEscrow.token}\n`
     : ""
 }Transaction: ${linkLine}`;
@@ -2296,7 +2309,7 @@ ${
             finalEscrow.tradeStartTime || finalEscrow.createdAt || new Date();
           const minutesTaken = Math.max(
             1,
-            Math.round((Date.now() - new Date(tradeStart)) / (60 * 1000))
+            Math.round((Date.now() - new Date(tradeStart)) / (60 * 1000)),
           );
 
           const completionText = `🎉 <b>Deal Complete!</b> ✅
@@ -2328,10 +2341,10 @@ Thank you for using our safe escrow system.`;
                     caption: completionText,
                     parse_mode: "HTML",
                     reply_markup: closeTradeKeyboard,
-                  }
+                  },
                 ),
               3,
-              2000
+              2000,
             );
 
             if (summaryMsg) {
@@ -2346,7 +2359,7 @@ Thank you for using our safe escrow system.`;
             finalEscrow,
             ctx.telegram,
             "completed",
-            releaseResult?.transactionHash || null
+            releaseResult?.transactionHash || null,
           );
 
           const settleAndRecycleGroup = async (escrow, telegram) => {
@@ -2360,7 +2373,7 @@ Thank you for using our safe escrow system.`;
                   await GroupPoolService.removeUsersFromGroup(
                     escrow,
                     group.groupId,
-                    telegram
+                    telegram,
                   );
 
                 if (allUsersRemoved) {
@@ -2374,7 +2387,7 @@ Thank you for using our safe escrow system.`;
 
                   await GroupPoolService.refreshInviteLink(
                     group.groupId,
-                    telegram
+                    telegram,
                   );
 
                   group.status = "available";
@@ -2431,7 +2444,7 @@ Thank you for using our safe escrow system.`;
         let errorMsg = `❌ Error releasing funds: ${releaseError.message}`;
         if (releaseError.message.includes("Insufficient Vault Balance")) {
           const match = releaseError.message.match(
-            /Contract has ([0-9.]+) but needs ([0-9.]+)/
+            /Contract has ([0-9.]+) but needs ([0-9.]+)/,
           );
           const available = match ? match[1] : "???";
           errorMsg = `⚠️ <b>Insufficient Vault Balance</b>
@@ -2470,7 +2483,7 @@ Please check the contract balance or top up the vault.`;
       ) {
         return safeAnswerCbQuery(
           ctx,
-          "❌ This release confirmation is no longer valid or has already been processed."
+          "❌ This release confirmation is no longer valid or has already been processed.",
         );
       }
 
@@ -2491,7 +2504,7 @@ Please check the contract balance or top up the vault.`;
       if (!isBuyer && !isSeller && !isAdmin) {
         return safeAnswerCbQuery(
           ctx,
-          "❌ Only buyer, seller, or admin can approve release."
+          "❌ Only buyer, seller, or admin can approve release.",
         );
       }
 
@@ -2502,8 +2515,8 @@ Please check the contract balance or top up the vault.`;
         escrow.sellerConfirmedRelease = true;
       }
       if (isAdmin && !isBuyer && !isSeller) {
-        escrow.buyerConfirmedRelease = true;
-        escrow.sellerConfirmedRelease = true;
+        // Admin confirms with their own flag (doesn't auto-approve for others)
+        escrow.adminConfirmedRelease = true;
       }
       await escrow.save();
 
@@ -2520,12 +2533,21 @@ Please check the contract balance or top up the vault.`;
       let approvalNote = "";
       let statusSection = "";
 
-      if (isPartialRelease) {
-        approvalNote =
-          updatedEscrow.buyerConfirmedRelease &&
-          updatedEscrow.sellerConfirmedRelease
-            ? "✅ All approvals received. Processing release..."
-            : "⚠️ Both requests required for partial release.";
+      // Check if admin confirmed (admin confirmation alone is sufficient)
+      const adminApproved = updatedEscrow.adminConfirmedRelease === true;
+      const bothPartiesApproved =
+        updatedEscrow.buyerConfirmedRelease &&
+        updatedEscrow.sellerConfirmedRelease;
+      const canExecute = adminApproved || bothPartiesApproved;
+
+      if (adminApproved) {
+        // Admin confirmed - show admin status
+        statusSection = `✅ Admin - Confirmed`;
+        approvalNote = "✅ Admin confirmed. Processing release...";
+      } else if (isPartialRelease) {
+        approvalNote = bothPartiesApproved
+          ? "✅ All approvals received. Processing release..."
+          : "⚠️ Both requests required for partial release.";
 
         const sellerLine = updatedEscrow.sellerConfirmedRelease
           ? `✅ ${sellerTag} - Confirmed`
@@ -2535,6 +2557,7 @@ Please check the contract balance or top up the vault.`;
           : `⌛️ ${buyerTag} - Waiting...`;
         statusSection = `${sellerLine}\n${buyerLine}`;
       } else {
+        // Full release - only seller needs to approve
         statusSection = updatedEscrow.sellerConfirmedRelease
           ? `✅ ${sellerTag} - Confirmed`
           : `⌛️ ${sellerTag} - Waiting...`;
@@ -2553,15 +2576,14 @@ ${approvalNote}`;
 
       if (updatedEscrow.releaseConfirmationMessageId) {
         try {
-          let showButtons = true;
-          if (isPartialRelease) {
-            if (
-              updatedEscrow.buyerConfirmedRelease &&
-              updatedEscrow.sellerConfirmedRelease
-            )
-              showButtons = false;
-          } else {
-            if (updatedEscrow.sellerConfirmedRelease) showButtons = false;
+          let showButtons = !canExecute;
+          if (!adminApproved) {
+            // For user-initiated: check if conditions are met
+            if (isPartialRelease) {
+              if (bothPartiesApproved) showButtons = false;
+            } else {
+              if (updatedEscrow.sellerConfirmedRelease) showButtons = false;
+            }
           }
 
           await ctx.telegram.editMessageCaption(
@@ -2578,16 +2600,16 @@ ${approvalNote}`;
                       [
                         Markup.button.callback(
                           "✅ Approve",
-                          `release_confirm_yes_${updatedEscrow.escrowId}`
+                          `release_confirm_yes_${updatedEscrow.escrowId}`,
                         ),
                         Markup.button.callback(
                           "❌ Decline",
-                          `release_confirm_no_${updatedEscrow.escrowId}`
+                          `release_confirm_no_${updatedEscrow.escrowId}`,
                         ),
                       ],
                     ],
                   },
-            }
+            },
           );
         } catch (e) {
           const description = e?.response?.description || e?.message || "";
@@ -2599,25 +2621,22 @@ ${approvalNote}`;
         }
       }
 
-      if (
-        updatedEscrow.buyerConfirmedRelease &&
-        updatedEscrow.sellerConfirmedRelease
-      ) {
+      if (canExecute) {
         await safeAnswerCbQuery(
           ctx,
-          "✅ Both parties approved. Processing release..."
+          adminApproved
+            ? "✅ Admin confirmed. Processing release..."
+            : "✅ Both parties approved. Processing release...",
         );
       } else {
         await safeAnswerCbQuery(
           ctx,
-          "✅ Your approval has been recorded. Waiting for the seller..."
+          "✅ Your approval has been recorded. Waiting for confirmation...",
         );
+        return; // Don't execute yet
       }
 
-      if (
-        updatedEscrow.buyerConfirmedRelease &&
-        updatedEscrow.sellerConfirmedRelease
-      ) {
+      if (canExecute) {
         // Final guard to prevent double release if something already settled the deal
         if (
           updatedEscrow.releaseTransactionHash ||
@@ -2625,13 +2644,13 @@ ${approvalNote}`;
         ) {
           return safeAnswerCbQuery(
             ctx,
-            "❌ This deal has already been settled."
+            "❌ This deal has already been settled.",
           );
         }
 
         const decimals = BlockchainService.getTokenDecimals(
           updatedEscrow.token,
-          updatedEscrow.chain
+          updatedEscrow.chain,
         );
         const totalDepositedWei =
           updatedEscrow.accumulatedDepositAmountWei &&
@@ -2642,7 +2661,7 @@ ${approvalNote}`;
           updatedEscrow.accumulatedDepositAmount ||
             updatedEscrow.depositAmount ||
             updatedEscrow.confirmedAmount ||
-            0
+            0,
         );
         const formattedTotalDeposited = totalDepositedWei
           ? Number(ethers.formatUnits(BigInt(totalDepositedWei), decimals))
@@ -2651,7 +2670,7 @@ ${approvalNote}`;
         if (!updatedEscrow.buyerAddress || totalDeposited <= 0) {
           return safeAnswerCbQuery(
             ctx,
-            "❌ Cannot release funds: missing buyer address or zero amount."
+            "❌ Cannot release funds: missing buyer address or zero amount.",
           );
         }
 
@@ -2665,15 +2684,15 @@ ${approvalNote}`;
           return safeAnswerCbQuery(
             ctx,
             `❌ Release amount exceeds available balance (${formattedTotalDeposited.toFixed(
-              5
-            )} ${updatedEscrow.token}).`
+              5,
+            )} ${updatedEscrow.token}).`,
           );
         }
 
         if (releaseAmount <= 0) {
           return safeAnswerCbQuery(
             ctx,
-            "❌ Release amount must be greater than 0."
+            "❌ Release amount must be greater than 0.",
           );
         }
 
@@ -2687,11 +2706,11 @@ ${approvalNote}`;
           try {
             const releaseAmountWei = ethers.parseUnits(
               releaseAmount.toFixed(decimals),
-              decimals
+              decimals,
             );
             const totalDepositedAmountWei = ethers.parseUnits(
               formattedTotalDeposited.toFixed(decimals),
-              decimals
+              decimals,
             );
             const proportionalWei =
               (BigInt(totalDepositedWei) * BigInt(releaseAmountWei)) /
@@ -2716,24 +2735,25 @@ ${approvalNote}`;
           }
         }
 
-        // Fee Calculation
+        // Fee Calculation (Off-chain)
         const feeRateVal = updatedEscrow.feeRate;
         const networkFee = updatedEscrow.networkFee;
         const grossReleaseAmount = releaseAmount;
 
-        // Amount sent to contract (after network fee)
+        // Amount subject to fee (after network fee)
         const amountToContract = grossReleaseAmount - networkFee;
 
-        // Contract will deduct service fee from this amount
+        // Calculate service fee
         const serviceFeeOnNet = (amountToContract * feeRateVal) / 100;
 
-        // This is what user will ACTUALLY receive
+        // This is what user will ACTUALLY receive (Net Amount)
         const actualAmountToUser = amountToContract - serviceFeeOnNet;
 
         if (actualAmountToUser <= 0) {
           console.warn(
-            `Warning: Actual amount to user ${actualAmountToUser} is <= 0.`
+            `Warning: Actual amount to user ${actualAmountToUser} is <= 0.`,
           );
+          return safeAnswerCbQuery(ctx, "❌ Net amount too small.");
         }
 
         try {
@@ -2741,10 +2761,10 @@ ${approvalNote}`;
             updatedEscrow.token,
             updatedEscrow.chain,
             updatedEscrow.buyerAddress,
-            amountToContract,
+            actualAmountToUser, // Pass NET amount
             null,
             updatedEscrow.groupId,
-            updatedEscrow.contractAddress
+            updatedEscrow.contractAddress,
           );
 
           if (!releaseResult || !releaseResult.success) {
@@ -2753,13 +2773,13 @@ ${approvalNote}`;
 
           if (!releaseResult.transactionHash) {
             throw new Error(
-              "Release transaction succeeded but no transaction hash returned"
+              "Release transaction succeeded but no transaction hash returned",
             );
           }
 
           updatedEscrow.releaseTransactionHash = releaseResult.transactionHash;
           updatedEscrow.partialReleaseTransactionHashes.push(
-            releaseResult.transactionHash
+            releaseResult.transactionHash,
           );
 
           const EPSILON = 0.00001;
@@ -2853,7 +2873,7 @@ ${approvalNote}`;
             new Date();
           const minutesTaken = Math.max(
             1,
-            Math.round((Date.now() - new Date(tradeStart)) / (60 * 1000))
+            Math.round((Date.now() - new Date(tradeStart)) / (60 * 1000)),
           );
 
           const chainUpper = (updatedEscrow.chain || "").toUpperCase();
@@ -2907,7 +2927,7 @@ Thank you for using our safe escrow system.`;
                   caption: completionText,
                   parse_mode: "HTML",
                   reply_markup: closeTradeKeyboard,
-                }
+                },
               );
             } catch (sendError) {
               console.error("Error sending completion summary:", sendError);
@@ -2927,7 +2947,7 @@ Thank you for using our safe escrow system.`;
               updatedEscrow,
               ctx.telegram,
               "completed",
-              releaseResult?.transactionHash || null
+              releaseResult?.transactionHash || null,
             );
 
             const settleAndRecycleGroup = async (escrow, telegram) => {
@@ -2941,7 +2961,7 @@ Thank you for using our safe escrow system.`;
                     await GroupPoolService.removeUsersFromGroup(
                       escrow,
                       group.groupId,
-                      telegram
+                      telegram,
                     );
 
                   if (allUsersRemoved) {
@@ -2955,7 +2975,7 @@ Thank you for using our safe escrow system.`;
 
                     await GroupPoolService.refreshInviteLink(
                       group.groupId,
-                      telegram
+                      telegram,
                     );
 
                     group.status = "available";
@@ -2983,7 +3003,7 @@ Amount Released: ${actualAmountToUser.toFixed(5)} ${updatedEscrow.token}
               await ctx.telegram.sendMessage(
                 updatedEscrow.groupId,
                 partialReleaseText,
-                { parse_mode: "HTML" }
+                { parse_mode: "HTML" },
               );
             } catch (e) {
               console.error("Error sending partial release message:", e);
@@ -2993,7 +3013,7 @@ Amount Released: ${actualAmountToUser.toFixed(5)} ${updatedEscrow.token}
           try {
             const releaseStatusText = isPartialRelease
               ? `✅ Partial release completed: ${actualAmountToUser.toFixed(
-                  5
+                  5,
                 )} ${updatedEscrow.token}`
               : "✅ Release completed.";
             await ctx.editMessageCaption(
@@ -3001,7 +3021,7 @@ Amount Released: ${actualAmountToUser.toFixed(5)} ${updatedEscrow.token}
               updatedEscrow.releaseConfirmationMessageId,
               null,
               releaseStatusText,
-              { parse_mode: "HTML" }
+              { parse_mode: "HTML" },
             );
           } catch (e) {
             const description = e?.response?.description || e?.message || "";
@@ -3010,7 +3030,7 @@ Amount Released: ${actualAmountToUser.toFixed(5)} ${updatedEscrow.token}
               try {
                 const releaseStatusText = isPartialRelease
                   ? `✅ Partial release completed: ${releaseAmount.toFixed(
-                      5
+                      5,
                     )} ${updatedEscrow.token}`
                   : "✅ Release completed.";
                 await ctx.editMessageText(releaseStatusText);
@@ -3034,7 +3054,7 @@ Amount Released: ${actualAmountToUser.toFixed(5)} ${updatedEscrow.token}
             "❌ Release failed. Please try again or contact support.";
           if (errStr.includes("Insufficient Vault Balance")) {
             const match = errStr.match(
-              /Contract has ([0-9.]+) but needs ([0-9.]+)/
+              /Contract has ([0-9.]+) but needs ([0-9.]+)/,
             );
             const available = match ? match[1] : "???";
             errorText = `⚠️ <b>Insufficient Vault Balance</b>
@@ -3093,7 +3113,7 @@ Please contact support to resolve this vault balance issue.`;
             escrow.releaseConfirmationMessageId,
             null,
             "❌ Release request was declined/cancelled.",
-            { parse_mode: "HTML" }
+            { parse_mode: "HTML" },
           );
         } catch (e) {}
       }
@@ -3175,20 +3195,20 @@ Please contact support to resolve this vault balance issue.`;
                   [
                     Markup.button.callback(
                       "✅ Confirm Refund",
-                      `refund_confirm_yes_${escrowId}`
+                      `refund_confirm_yes_${escrowId}`,
                     ),
                     Markup.button.callback(
                       "❌ Cancel",
-                      `refund_confirm_no_${escrowId}`
+                      `refund_confirm_no_${escrowId}`,
                     ),
                   ],
                 ],
               },
-            }
+            },
           );
           return safeAnswerCbQuery(
             ctx,
-            "✅ Confirmed. Waiting for other party..."
+            "✅ Confirmed. Waiting for other party...",
           );
         } catch (e) {}
       }
@@ -3202,7 +3222,7 @@ Please contact support to resolve this vault balance issue.`;
         const totalDeposited = Number(
           updatedEscrow.accumulatedDepositAmount ||
             updatedEscrow.depositAmount ||
-            0
+            0,
         );
         const pendingAmt = updatedEscrow.pendingRefundAmount || totalDeposited;
         const refundAmount = Math.min(pendingAmt, totalDeposited);
@@ -3212,7 +3232,7 @@ Please contact support to resolve this vault balance issue.`;
 
         const decimals = BlockchainService.getTokenDecimals(
           updatedEscrow.token,
-          updatedEscrow.chain
+          updatedEscrow.chain,
         );
         let amountWeiOverride = null;
         const EPSILON = 0.00001;
@@ -3234,7 +3254,7 @@ Please contact support to resolve this vault balance issue.`;
             updatedEscrow.refundConfirmationMessageId,
             null,
             "🔄 Refund in progress...",
-            { parse_mode: "HTML" }
+            { parse_mode: "HTML" },
           );
         } catch (e) {}
 
@@ -3245,25 +3265,23 @@ Please contact support to resolve this vault balance issue.`;
 
         if (amountToContract <= 0) {
           console.warn(
-            `Warning: Refund amount ${refundAmountNum} is less than or equal to network fee ${networkFee}. Using full amount.`
+            `Warning: Refund amount ${refundAmountNum} is less than or equal to network fee ${networkFee}. Using full amount.`,
           );
           amountToContract = refundAmountNum;
         }
 
-        // Contract will deduct service fee from amountToContract
-        const serviceFeeOnNet =
-          (amountToContract * (updatedEscrow.feeRate || 0)) / 100;
-        const actualAmountToUser = amountToContract - serviceFeeOnNet;
+        // For refunds, only deduct network fee (no service fee charged)
+        const actualAmountToUser = amountToContract;
 
         try {
           const refundResult = await BlockchainService.refundFunds(
             updatedEscrow.token,
             updatedEscrow.chain,
             updatedEscrow.sellerAddress,
-            amountToContract,
+            actualAmountToUser, // Pass amount after network fee (no service fee)
             null,
             updatedEscrow.groupId,
-            updatedEscrow.contractAddress
+            updatedEscrow.contractAddress,
           );
 
           updatedEscrow.refundTransactionHash = refundResult.transactionHash;
@@ -3295,7 +3313,7 @@ Please contact support to resolve this vault balance issue.`;
           // Success Message
           const explorerUrl = CompletionFeedService.getExplorerLink(
             updatedEscrow.chain || "BSC",
-            refundResult.transactionHash
+            refundResult.transactionHash,
           );
           const linkLine = explorerUrl
             ? `<a href="${explorerUrl}">Click Here</a>`
@@ -3322,13 +3340,13 @@ Transaction: ${linkLine}`;
             updatedEscrow,
             ctx.telegram,
             updatedEscrow.status,
-            refundResult.transactionHash
+            refundResult.transactionHash,
           );
         } catch (error) {
           console.error("Refund failed:", error);
           await ctx.telegram.sendMessage(
             updatedEscrow.groupId,
-            "❌ Refund failed: " + error.message
+            "❌ Refund failed: " + error.message,
           );
         }
       }
@@ -3355,7 +3373,7 @@ Transaction: ${linkLine}`;
           escrow.refundConfirmationMessageId,
           null,
           "❌ Refund cancelled.",
-          { parse_mode: "HTML" }
+          { parse_mode: "HTML" },
         );
       } catch (e) {}
       await safeAnswerCbQuery(ctx, "❌ Cancelled.");
@@ -3374,7 +3392,7 @@ Transaction: ${linkLine}`;
       if (escrow.sellerId !== userId) {
         return safeAnswerCbQuery(
           ctx,
-          "❌ Only the seller can choose this option."
+          "❌ Only the seller can choose this option.",
         );
       }
 
@@ -3393,7 +3411,7 @@ Transaction: ${linkLine}`;
         if (escrow.transactionHashMessageId) {
           await ctx.telegram.deleteMessage(
             escrow.groupId,
-            escrow.transactionHashMessageId
+            escrow.transactionHashMessageId,
           );
         }
       } catch (e) {}
@@ -3402,7 +3420,7 @@ Transaction: ${linkLine}`;
       try {
         if (escrow.partialPaymentMessageId) {
           await ctx.editMessageText(
-            "✅ Continuing with partial amount. Trade will proceed with the received amount."
+            "✅ Continuing with partial amount. Trade will proceed with the received amount.",
           );
         }
       } catch (e) {}
@@ -3439,7 +3457,7 @@ Transaction: ${linkLine}`;
         {
           caption: confirmedTxText,
           parse_mode: "HTML",
-        }
+        },
       );
 
       escrow.transactionHashMessageId = txDetailsMsg.message_id;
@@ -3480,7 +3498,7 @@ Use /release After Fund Transfer to Seller
       if (escrow.sellerId !== userId) {
         return safeAnswerCbQuery(
           ctx,
-          "❌ Only the seller can choose this option."
+          "❌ Only the seller can choose this option.",
         );
       }
 
@@ -3511,7 +3529,7 @@ Use /release After Fund Transfer to Seller
               `Please send the remaining ${remainingFormatted} ${escrow.token} to the same deposit address:\n` +
               `<code>${escrow.depositAddress}</code>\n\n` +
               `After sending, provide the new transaction hash.`,
-            { parse_mode: "HTML" }
+            { parse_mode: "HTML" },
           );
         }
       } catch (e) {
@@ -3520,7 +3538,7 @@ Use /release After Fund Transfer to Seller
           `💰 Please send the remaining ${remainingFormatted} ${escrow.token} to:\n` +
             `<code>${escrow.depositAddress}</code>\n\n` +
             `After sending, provide the new transaction hash.`,
-          { parse_mode: "HTML" }
+          { parse_mode: "HTML" },
         );
       }
 
@@ -3563,7 +3581,7 @@ Use /release After Fund Transfer to Seller
         try {
           await ctx.telegram.deleteMessage(
             escrow.groupId,
-            escrow.refundConfirmationMessageId
+            escrow.refundConfirmationMessageId,
           );
         } catch (e) {}
         escrow.refundConfirmationMessageId = null;
@@ -3603,7 +3621,7 @@ Use /release After Fund Transfer to Seller
       ) {
         return safeAnswerCbQuery(
           ctx,
-          "❌ This refund confirmation is no longer valid or has already been processed."
+          "❌ This refund confirmation is no longer valid or has already been processed.",
         );
       }
 
@@ -3623,7 +3641,7 @@ Use /release After Fund Transfer to Seller
       // Calculate amount - use pendingRefundAmount if set, otherwise use full deposited amount
       const decimals = BlockchainService.getTokenDecimals(
         escrow.token,
-        escrow.chain
+        escrow.chain,
       );
       const totalDepositedWei =
         escrow.accumulatedDepositAmountWei &&
@@ -3634,7 +3652,7 @@ Use /release After Fund Transfer to Seller
         escrow.accumulatedDepositAmount ||
           escrow.depositAmount ||
           escrow.confirmedAmount ||
-          0
+          0,
       );
       const formattedTotalDeposited = totalDepositedWei
         ? Number(ethers.formatUnits(BigInt(totalDepositedWei), decimals))
@@ -3656,8 +3674,8 @@ Use /release After Fund Transfer to Seller
         return safeAnswerCbQuery(
           ctx,
           `❌ Refund amount exceeds available balance (${formattedTotalDeposited.toFixed(
-            5
-          )} ${escrow.token}).`
+            5,
+          )} ${escrow.token}).`,
         );
       }
 
@@ -3665,7 +3683,7 @@ Use /release After Fund Transfer to Seller
       if (refundAmount <= 0) {
         return safeAnswerCbQuery(
           ctx,
-          "❌ Refund amount must be greater than 0."
+          "❌ Refund amount must be greater than 0.",
         );
       }
 
@@ -3685,11 +3703,11 @@ Use /release After Fund Transfer to Seller
         try {
           const refundAmountWei = ethers.parseUnits(
             refundAmount.toFixed(decimals),
-            decimals
+            decimals,
           );
           const totalDepositedAmountWei = ethers.parseUnits(
             formattedTotalDeposited.toFixed(decimals),
-            decimals
+            decimals,
           );
           // Calculate proportional wei: (totalDepositedWei * refundAmountWei) / totalDepositedAmountWei
           const proportionalWei =
@@ -3727,7 +3745,7 @@ Use /release After Fund Transfer to Seller
           escrow.sellerAddress,
           refundAmount,
           amountWeiOverride,
-          escrow.groupId
+          escrow.groupId,
         );
 
         if (!refundResult || !refundResult.success) {
@@ -3737,7 +3755,7 @@ Use /release After Fund Transfer to Seller
         // Ensure transaction hash exists (should always exist if transaction succeeded)
         if (!refundResult.transactionHash) {
           throw new Error(
-            "Refund transaction succeeded but no transaction hash returned"
+            "Refund transaction succeeded but no transaction hash returned",
           );
         }
 
@@ -3843,7 +3861,7 @@ Use /release After Fund Transfer to Seller
             finalEscrow,
             ctx.telegram,
             "refunded",
-            refundResult?.transactionHash || null
+            refundResult?.transactionHash || null,
           );
 
           // Send completion message with close deal button
@@ -3852,7 +3870,7 @@ Use /release After Fund Transfer to Seller
             finalEscrow.tradeStartTime || finalEscrow.createdAt || new Date();
           const minutesTaken = Math.max(
             1,
-            Math.round((Date.now() - new Date(tradeStart)) / (60 * 1000))
+            Math.round((Date.now() - new Date(tradeStart)) / (60 * 1000)),
           );
 
           const chainUpper = (finalEscrow.chain || "").toUpperCase();
@@ -3899,7 +3917,7 @@ Thank you for using our safe escrow system.`;
                 caption: completionText,
                 parse_mode: "HTML",
                 reply_markup: closeTradeKeyboard,
-              }
+              },
             );
 
             if (summaryMsg) {
@@ -3909,7 +3927,7 @@ Thank you for using our safe escrow system.`;
           } catch (sendError) {
             console.error(
               "Error sending refund completion summary:",
-              sendError
+              sendError,
             );
           }
 
@@ -3925,7 +3943,7 @@ Thank you for using our safe escrow system.`;
                   await GroupPoolService.removeUsersFromGroup(
                     escrow,
                     group.groupId,
-                    telegram
+                    telegram,
                   );
 
                 if (allUsersRemoved) {
@@ -3939,7 +3957,7 @@ Thank you for using our safe escrow system.`;
 
                   await GroupPoolService.refreshInviteLink(
                     group.groupId,
-                    telegram
+                    telegram,
                   );
 
                   group.status = "available";
@@ -3965,7 +3983,7 @@ Thank you for using our safe escrow system.`;
           error?.message || error?.toString() || "Unknown error";
         await ctx.telegram.sendMessage(
           escrow.groupId,
-          `❌ Error refunding funds: ${errorMessage}`
+          `❌ Error refunding funds: ${errorMessage}`,
         );
       }
       return;
@@ -3986,11 +4004,11 @@ Thank you for using our safe escrow system.`;
       if (escrow.sellerId !== userId)
         return safeAnswerCbQuery(
           ctx,
-          "❌ Only the seller can confirm release."
+          "❌ Only the seller can confirm release.",
         );
       const decimals = BlockchainService.getTokenDecimals(
         escrow.token,
-        escrow.chain
+        escrow.chain,
       );
       const amountWeiOverride =
         escrow.accumulatedDepositAmountWei &&
@@ -4001,16 +4019,16 @@ Thank you for using our safe escrow system.`;
         escrow.accumulatedDepositAmount ||
           escrow.depositAmount ||
           escrow.confirmedAmount ||
-          0
+          0,
       );
       if (amountWeiOverride) {
         amount = Number(
-          ethers.formatUnits(BigInt(amountWeiOverride), decimals)
+          ethers.formatUnits(BigInt(amountWeiOverride), decimals),
         );
       }
       if (!escrow.buyerAddress || amount <= 0) {
         return ctx.reply(
-          "⚠️ Cannot proceed: missing buyer address or zero amount."
+          "⚠️ Cannot proceed: missing buyer address or zero amount.",
         );
       }
       await safeAnswerCbQuery(ctx, "🚀 Releasing...");
@@ -4028,12 +4046,12 @@ Thank you for using our safe escrow system.`;
           escrow.buyerAddress,
           amountToContract,
           null,
-          escrow.groupId
+          escrow.groupId,
         );
         // Ensure transaction hash exists (should always exist if transaction succeeded)
         if (!releaseResult || !releaseResult.transactionHash) {
           throw new Error(
-            "Release transaction succeeded but no transaction hash returned"
+            "Release transaction succeeded but no transaction hash returned",
           );
         }
 
@@ -4081,7 +4099,7 @@ Thank you for using our safe escrow system.`;
           escrow,
           ctx.telegram,
           "completed",
-          releaseResult?.transactionHash
+          releaseResult?.transactionHash,
         );
 
         // Send release confirmation message to the group (not as a reply to callback)
@@ -4127,7 +4145,7 @@ Trade completed successfully.`;
 
           console.log(
             "Sending release confirmation with caption:",
-            releaseConfirmationCaption
+            releaseConfirmationCaption,
           );
           const sentMessage = await ctx.telegram.sendPhoto(
             escrow.groupId,
@@ -4135,16 +4153,16 @@ Trade completed successfully.`;
             {
               caption: releaseConfirmationCaption,
               parse_mode: "HTML",
-            }
+            },
           );
           console.log(
             "Release confirmation message sent successfully. Message ID:",
-            sentMessage.message_id
+            sentMessage.message_id,
           );
         } catch (sendError) {
           console.error(
             "Error sending release confirmation message:",
-            sendError
+            sendError,
           );
           console.error("Error details:", {
             message: sendError.message,
@@ -4165,15 +4183,15 @@ Trade completed successfully.`;
               [
                 Markup.button.callback(
                   "✅ Yes, I received",
-                  `buyer_received_tokens_yes_${escrow.escrowId}`
+                  `buyer_received_tokens_yes_${escrow.escrowId}`,
                 ),
                 Markup.button.callback(
                   "❌ No, not received",
-                  `buyer_received_tokens_no_${escrow.escrowId}`
+                  `buyer_received_tokens_no_${escrow.escrowId}`,
                 ),
               ],
             ]).reply_markup,
-          }
+          },
         );
 
         // Reload escrow to get latest state
@@ -4191,7 +4209,7 @@ Trade completed successfully.`;
                 await GroupPoolService.removeUsersFromGroup(
                   escrow,
                   group.groupId,
-                  telegram
+                  telegram,
                 );
 
               if (allUsersRemoved) {
@@ -4205,7 +4223,7 @@ Trade completed successfully.`;
 
                 await GroupPoolService.refreshInviteLink(
                   group.groupId,
-                  telegram
+                  telegram,
                 );
 
                 group.status = "available";
@@ -4250,13 +4268,13 @@ Trade completed successfully.`;
       if (role === "buyer" && escrow.buyerId !== userId) {
         return safeAnswerCbQuery(
           ctx,
-          "❌ Only the buyer can confirm this action."
+          "❌ Only the buyer can confirm this action.",
         );
       }
       if (role === "seller" && escrow.sellerId !== userId) {
         return safeAnswerCbQuery(
           ctx,
-          "❌ Only the seller can confirm this action."
+          "❌ Only the seller can confirm this action.",
         );
       }
 
@@ -4264,7 +4282,7 @@ Trade completed successfully.`;
       if (action === "refund") {
         return safeAnswerCbQuery(
           ctx,
-          "❌ Refund functionality requires seller address. Please contact admin for refunds."
+          "❌ Refund functionality requires seller address. Please contact admin for refunds.",
         );
       }
 
@@ -4289,7 +4307,7 @@ Trade completed successfully.`;
         // Execute the transaction
         const decimals = BlockchainService.getTokenDecimals(
           escrow.token,
-          escrow.chain
+          escrow.chain,
         );
         const amountWeiOverride =
           escrow.accumulatedDepositAmountWei &&
@@ -4307,12 +4325,12 @@ Trade completed successfully.`;
         // Fee Calculation Logic - STRICT NO FALLBACKS
         if (escrow.feeRate === undefined || escrow.feeRate === null) {
           return ctx.reply(
-            "❌ Critical Error: Deal fee rate is missing. Cannot calculate fees."
+            "❌ Critical Error: Deal fee rate is missing. Cannot calculate fees.",
           );
         }
         if (escrow.networkFee === undefined || escrow.networkFee === null) {
           return ctx.reply(
-            "❌ Critical Error: Network fee is missing. Cannot calculate fees."
+            "❌ Critical Error: Network fee is missing. Cannot calculate fees.",
           );
         }
 
@@ -4329,14 +4347,14 @@ Trade completed successfully.`;
 
         if (actualAmountToUser <= 0) {
           return ctx.reply(
-            "❌ Error: Calculated release amount (after fees) is zero or negative."
+            "❌ Error: Calculated release amount (after fees) is zero or negative.",
           );
         }
 
         const targetAddress = escrow.buyerAddress;
         if (!targetAddress) {
           return ctx.reply(
-            "❌ Buyer address is not set. Cannot proceed with release."
+            "❌ Buyer address is not set. Cannot proceed with release.",
           );
         }
 
@@ -4347,12 +4365,12 @@ Trade completed successfully.`;
             targetAddress,
             amountToContract,
             null,
-            escrow.groupId
+            escrow.groupId,
           );
 
           if (!releaseResult || !releaseResult.transactionHash) {
             throw new Error(
-              "Release transaction succeeded but no transaction hash returned"
+              "Release transaction succeeded but no transaction hash returned",
             );
           }
 
@@ -4396,7 +4414,7 @@ Trade completed successfully.`;
 
           const successText = `
 ${netAmount.toFixed(5)} ${escrow.token} [$${netAmount.toFixed(
-            2
+            2,
           )}] 💸 + NETWORK FEE has been released to the Buyer's address! 🚀
 
 Approved By: ${
@@ -4452,15 +4470,15 @@ Approved By: ${
                 [
                   Markup.button.callback(
                     "✅ Yes, I received",
-                    `buyer_received_tokens_yes_${escrow.escrowId}`
+                    `buyer_received_tokens_yes_${escrow.escrowId}`,
                   ),
                   Markup.button.callback(
                     "❌ No, not received",
-                    `buyer_received_tokens_no_${escrow.escrowId}`
+                    `buyer_received_tokens_no_${escrow.escrowId}`,
                   ),
                 ],
               ]).reply_markup,
-            }
+            },
           );
 
           // Send trade completion message with close trade button
@@ -4509,7 +4527,7 @@ Approved By: ${
                   await GroupPoolService.removeUsersFromGroup(
                     escrow,
                     group.groupId,
-                    telegram
+                    telegram,
                   );
 
                 if (allUsersRemoved) {
@@ -4523,7 +4541,7 @@ Approved By: ${
 
                   await GroupPoolService.refreshInviteLink(
                     group.groupId,
-                    telegram
+                    telegram,
                   );
 
                   group.status = "available";
@@ -4545,7 +4563,7 @@ Approved By: ${
         } catch (error) {
           console.error("Error executing transaction:", error);
           await ctx.reply(
-            "❌ Error executing transaction. Please try again or contact support."
+            "❌ Error executing transaction. Please try again or contact support.",
           );
         }
       } else {
@@ -4561,7 +4579,7 @@ Approved By: ${
       if (action === "refund") {
         return safeAnswerCbQuery(
           ctx,
-          "❌ Refund functionality requires seller address. Please contact admin for refunds."
+          "❌ Refund functionality requires seller address. Please contact admin for refunds.",
         );
       }
 
@@ -4583,7 +4601,7 @@ Approved By: ${
 
       await safeAnswerCbQuery(ctx, "❌ Transaction rejected");
       await ctx.reply(
-        "❌ Transaction has been rejected by one of the parties. Please restart the process if needed."
+        "❌ Transaction has been rejected by one of the parties. Please restart the process if needed.",
       );
 
       return;
@@ -4594,7 +4612,7 @@ Approved By: ${
       if (!callbackChatId || callbackChatId <= 0) {
         await safeAnswerCbQuery(
           ctx,
-          "❌ This command can only be used in private chat."
+          "❌ This command can only be used in private chat.",
         );
         return;
       }
@@ -4613,7 +4631,7 @@ Approved By: ${
       if (!callbackChatId || callbackChatId <= 0) {
         await safeAnswerCbQuery(
           ctx,
-          "❌ This command can only be used in private chat."
+          "❌ This command can only be used in private chat.",
         );
         return;
       }
@@ -4622,7 +4640,7 @@ Approved By: ${
       if (!isAdmin(ctx)) {
         await safeAnswerCbQuery(
           ctx,
-          "❌ Access denied. Admin privileges required."
+          "❌ Access denied. Admin privileges required.",
         );
         return;
       }
@@ -4641,7 +4659,7 @@ Approved By: ${
       if (!callbackChatId || callbackChatId <= 0) {
         await safeAnswerCbQuery(
           ctx,
-          "❌ This command can only be used in private chat."
+          "❌ This command can only be used in private chat.",
         );
         return;
       }
@@ -4650,7 +4668,7 @@ Approved By: ${
       if (!isAdmin(ctx)) {
         await safeAnswerCbQuery(
           ctx,
-          "❌ Access denied. Admin privileges required."
+          "❌ Access denied. Admin privileges required.",
         );
         return;
       }
@@ -4728,7 +4746,7 @@ Approved By: ${
               [{ text: "🔄 Refresh", callback_data: "leaderboard_buyers" }],
             ],
           },
-        }
+        },
       );
       await safeAnswerCbQuery(ctx);
       return;
