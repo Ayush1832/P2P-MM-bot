@@ -1,15 +1,3 @@
-/**
- * One-time script to set feePercent in GroupPool database
- * based on room names.
- *
- * Room Tiers:
- * - MM Room 1-10:  0.25% fee (for deals where both users have @room in bio)
- * - MM Room 11-15: 0.50% fee (for deals where one user has @room in bio)
- * - MM Room 16-20: 0.75% fee (for deals where no user has @room in bio)
- *
- * Usage: node scripts/setRoomFees.js
- */
-
 require("dotenv").config();
 const mongoose = require("mongoose");
 const GroupPool = require("../src/models/GroupPool");

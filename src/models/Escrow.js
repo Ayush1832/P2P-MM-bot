@@ -275,6 +275,24 @@ const escrowSchema = new mongoose.Schema({
     default: false,
   },
 
+  // TRON Manual Verification Fields
+  tronManualVerificationPending: {
+    type: Boolean,
+    default: false,
+  },
+  tronManualVerificationMessageId: {
+    type: Number,
+    required: false,
+  },
+  tronPendingTxHash: {
+    type: String,
+    required: false,
+  },
+  tronPendingAmount: {
+    type: Number,
+    required: false,
+  },
+
   buyerStatsParticipationRecorded: {
     type: Boolean,
     default: false,

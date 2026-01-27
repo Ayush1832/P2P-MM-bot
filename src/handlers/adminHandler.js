@@ -2405,6 +2405,9 @@ module.exports = {
   adminWithdrawRoom,
   adminHelp,
   setupAdminActions,
+  adminBroadcast,
+  handleBroadcastMessage,
+  hasPendingBroadcast,
 };
 
 async function adminWithdrawAllBsc(ctx) {
@@ -2556,4 +2559,160 @@ async function handleWithdrawAll(ctx, network) {
     console.error("Error in withdraw all:", error);
     ctx.reply(`❌ Error: ${error.message}`);
   }
+}
+
+// ============= BROADCAST COMMAND =============
+// In-memory state to track pending broadcast from admin
+const pendingBroadcasts = new Map();
+
+/**
+ * Admin broadcast command - Sends a message to all users via DM
+ * Only works in DM with the bot, admin only
+ */
+async function adminBroadcast(ctx) {
+  try {
+    const chatId = ctx.chat.id;
+    const userId = ctx.from.id;
+
+    // Only allow in DM (private chat)
+    if (chatId !== userId) {
+      return ctx.reply(
+        "❌ This command can only be used in a direct message with the bot.",
+      );
+    }
+
+    // Check if user is admin
+    const adminCheck = await isAdmin(ctx);
+    if (!adminCheck) {
+      return ctx.reply("❌ Only admins can use this command.");
+    }
+
+    // Set pending broadcast state for this admin
+    pendingBroadcasts.set(userId, { waiting: true, timestamp: Date.now() });
+
+    await ctx.reply(
+      "📢 <b>Broadcast Mode</b>\n\n" +
+        "Please send the message you want to broadcast to all users.\n" +
+        "You can send text, or an image with caption.\n\n" +
+        "<i>Send /cancel to cancel the broadcast.</i>",
+      { parse_mode: "HTML" },
+    );
+  } catch (error) {
+    console.error("Error in adminBroadcast:", error);
+    ctx.reply("❌ An error occurred.");
+  }
+}
+
+/**
+ * Handle incoming message for pending broadcast
+ */
+async function handleBroadcastMessage(ctx) {
+  try {
+    const userId = ctx.from.id;
+    const chatId = ctx.chat.id;
+
+    // Only handle DM messages
+    if (chatId !== userId) return false;
+
+    // Check if this user has a pending broadcast
+    const pending = pendingBroadcasts.get(userId);
+    if (!pending || !pending.waiting) return false;
+
+    // Check for cancel command
+    if (ctx.message.text === "/cancel") {
+      pendingBroadcasts.delete(userId);
+      await ctx.reply("❌ Broadcast cancelled.");
+      return true;
+    }
+
+    // Clear pending state
+    pendingBroadcasts.delete(userId);
+
+    // Get all users from database
+    const User = require("../models/User");
+    const allUsers = await User.find({
+      telegramId: { $exists: true, $ne: null },
+      isBlocked: { $ne: true },
+    }).select("telegramId");
+
+    if (allUsers.length === 0) {
+      await ctx.reply("❌ No users found to broadcast to.");
+      return true;
+    }
+
+    await ctx.reply(
+      `📤 Broadcasting to ${allUsers.length} users... This may take a moment.`,
+    );
+
+    let successCount = 0;
+    let failCount = 0;
+
+    // Determine message type and broadcast
+    for (const user of allUsers) {
+      try {
+        // Skip the admin sending the broadcast
+        if (user.telegramId === userId) {
+          successCount++;
+          continue;
+        }
+
+        if (ctx.message.photo) {
+          // Photo message with optional caption
+          const photo = ctx.message.photo[ctx.message.photo.length - 1];
+          await ctx.telegram.sendPhoto(user.telegramId, photo.file_id, {
+            caption: ctx.message.caption || "",
+            parse_mode: "HTML",
+          });
+        } else if (ctx.message.text) {
+          // Text message
+          await ctx.telegram.sendMessage(user.telegramId, ctx.message.text, {
+            parse_mode: "HTML",
+            disable_web_page_preview: true,
+          });
+        } else {
+          // Unsupported message type for this user, skip
+          continue;
+        }
+
+        successCount++;
+      } catch (sendError) {
+        // User may have blocked the bot or never started it
+        failCount++;
+      }
+
+      // Small delay to avoid rate limits
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    await ctx.reply(
+      `✅ <b>Broadcast Complete!</b>\n\n` +
+        `📤 Sent: ${successCount}\n` +
+        `❌ Failed: ${failCount}\n` +
+        `📊 Total: ${allUsers.length}`,
+      { parse_mode: "HTML" },
+    );
+
+    return true;
+  } catch (error) {
+    console.error("Error in handleBroadcastMessage:", error);
+    pendingBroadcasts.delete(ctx.from?.id);
+    await ctx.reply("❌ An error occurred during broadcast.");
+    return true;
+  }
+}
+
+/**
+ * Check if user has pending broadcast (for middleware use)
+ */
+function hasPendingBroadcast(userId) {
+  const pending = pendingBroadcasts.get(userId);
+  if (!pending) return false;
+
+  // Expire after 5 minutes
+  if (Date.now() - pending.timestamp > 5 * 60 * 1000) {
+    pendingBroadcasts.delete(userId);
+    return false;
+  }
+
+  return pending.waiting;
 }

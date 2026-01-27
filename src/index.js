@@ -113,11 +113,12 @@ async function buildDealSummary(escrow) {
   const buyerUsername = escrow.buyerUsername || "Buyer";
   const sellerUsername = escrow.sellerUsername || "Seller";
 
-  // Calculate release amount
+  // Calculate release amount: fee% first, then network fee
+  // Formula: released = deposited - serviceFee - networkFee
   const networkFee = escrow.networkFee || 0;
   const escrowFeePercent = escrow.feeRate;
-  const escrowFee = ((amount - networkFee) * escrowFeePercent) / 100;
-  const releaseAmount = amount - networkFee - escrowFee;
+  const escrowFee = (amount * escrowFeePercent) / 100;
+  const releaseAmount = amount - escrowFee - networkFee;
 
   let approvalStatus = "";
   if (escrow.buyerApproved && escrow.sellerApproved) {
@@ -995,6 +996,55 @@ Both parties must confirm to proceed.
             }
 
             txFrom = fromAddr;
+
+            // --- MANUAL TRON VERIFICATION START ---
+            // Instead of auto-confirming, we ask Admin 2 to verify
+
+            // 1. Mark escrow as pending manual verification
+            escrow.tronManualVerificationPending = true;
+            escrow.tronPendingTxHash = txHash;
+            escrow.tronPendingAmount = amount;
+
+            // 2. Notify Admin 2 in the group
+            const adminUsername2 = config.ADMIN_USERNAME2 || "Admin";
+            const adminTag = config.ADMIN_USERNAME2
+              ? `@${config.ADMIN_USERNAME2}`
+              : "Admin";
+
+            const verifyMsg = await ctx.telegram.sendMessage(
+              escrow.groupId,
+              `⚠️ <b>TRON DEPOSIT VERIFICATION REQUIRED</b>\n\n` +
+                `User submitted hash: <code>${txHash}</code>\n` +
+                `Amount detected: <b>${amount} ${escrow.token}</b>\n` +
+                `Expected: <b>${escrow.quantity} ${escrow.token}</b>\n\n` +
+                `${adminTag}, please verify funds are in the wallet and click below:`,
+              {
+                parse_mode: "HTML",
+                reply_markup: {
+                  inline_keyboard: [
+                    [
+                      {
+                        text: "✅ Funds Received",
+                        callback_data: `tron_verify_received_${escrow.escrowId}`,
+                      },
+                      {
+                        text: "❌ Not Received",
+                        callback_data: `tron_verify_not_received_${escrow.escrowId}`,
+                      },
+                    ],
+                  ],
+                },
+              },
+            );
+
+            escrow.tronManualVerificationMessageId = verifyMsg.message_id;
+            await escrow.save();
+
+            await ctx.reply(
+              "⏳ Deposit verification pending. Admin has been notified.",
+            );
+            return;
+            // --- MANUAL TRON VERIFICATION END ---
           } catch (error) {
             console.error("Error processing TRON transaction:", error);
             await ctx.reply(
@@ -1639,14 +1689,11 @@ Use /release After Fund Transfer to Seller
         const grossReleaseAmount =
           requestedAmount !== null ? requestedAmount : formattedTotalDeposited;
 
-        const estimatedAmountToContract =
-          grossReleaseAmount - currentNetworkFee;
-        const estimatedServiceFee =
-          (estimatedAmountToContract * currentFeeRate) / 100;
-
+        // Fee calculation: fee% on gross amount first, then network fee
+        const estimatedServiceFee = (grossReleaseAmount * currentFeeRate) / 100;
         const netReleaseAmount = Math.max(
           0,
-          estimatedAmountToContract - estimatedServiceFee,
+          grossReleaseAmount - estimatedServiceFee - currentNetworkFee,
         );
 
         if (netReleaseAmount <= 0) {
@@ -2329,9 +2376,11 @@ Funds returned to Seller.`;
         }
 
         const escrow = await findGroupEscrow(chatId, [
+          "awaiting_deposit",
           "deposited",
           "in_fiat_transfer",
           "ready_to_release",
+          "disputed",
         ]);
 
         if (!escrow) {
@@ -2361,26 +2410,9 @@ Funds returned to Seller.`;
           return ctx.reply("❌ No available balance found.");
         }
 
-        const bs = BlockchainService;
-        let realChainBalance = availableBalance;
+        // Use the escrow's recorded deposit amount for trade-specific balance
+        // Do NOT use contract's total balance as it includes accumulated fees from other trades
         let isMismatch = false;
-
-        try {
-          if (escrow.contractAddress) {
-            realChainBalance = await bs.getTokenBalance(
-              escrow.token,
-              escrow.chain,
-              escrow.contractAddress,
-            );
-
-            if (realChainBalance < availableBalance - 0.001) {
-              isMismatch = true;
-              availableBalance = realChainBalance;
-            }
-          }
-        } catch (e) {
-          console.error("Balance check error:", e.message);
-        }
 
         const networkName = (escrow.chain || "BSC").toUpperCase();
 
@@ -2397,8 +2429,8 @@ Funds returned to Seller.`;
 
         const escrowFeePercent = escrow.feeRate;
         const networkFee = escrow.networkFee;
-        const amountSubjectToFee = Math.max(0, availableBalance - networkFee);
-        const escrowFee = (amountSubjectToFee * escrowFeePercent) / 100;
+        // Fee% on gross amount first, then network fee
+        const escrowFee = (availableBalance * escrowFeePercent) / 100;
         const netBalance = Math.max(
           0,
           availableBalance - escrowFee - networkFee,
@@ -2591,6 +2623,11 @@ This is the current available balance for this trade.`;
           reply_markup: {
             inline_keyboard: [
               [
+                { text: "📅 Week", callback_data: "leaderboard_period_week" },
+                { text: "📆 Month", callback_data: "leaderboard_period_month" },
+                { text: "📊 Year", callback_data: "leaderboard_period_year" },
+              ],
+              [
                 { text: "Top Buyers", callback_data: "leaderboard_buyers" },
                 { text: "Top Sellers", callback_data: "leaderboard_sellers" },
               ],
@@ -2624,6 +2661,9 @@ This is the current available balance for this trade.`;
       adminWithdrawAllTron,
       adminWithdrawRoom,
       setupAdminActions,
+      adminBroadcast,
+      handleBroadcastMessage,
+      hasPendingBroadcast,
     } = adminHandler;
 
     this.bot.command("admin_stats", adminStats);
@@ -2647,6 +2687,21 @@ This is the current available balance for this trade.`;
     this.bot.command("withdraw_all_tron", adminWithdrawAllTron);
 
     this.bot.hears(/^\/withdraw_room_\d+$/i, adminWithdrawRoom);
+
+    // Broadcast command for admin to send messages to all users
+    this.bot.command("broadcast", adminBroadcast);
+
+    // Handle broadcast message content (must be before callback handler)
+    this.bot.on("message", async (ctx, next) => {
+      // Only check in DM
+      if (ctx.chat.id === ctx.from.id) {
+        if (hasPendingBroadcast(ctx.from.id)) {
+          const handled = await handleBroadcastMessage(ctx);
+          if (handled) return;
+        }
+      }
+      return next();
+    });
 
     // Setup admin actions (callbacks)
     setupAdminActions(this.bot);

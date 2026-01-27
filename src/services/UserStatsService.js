@@ -137,6 +137,176 @@ ${roleIcon} ${roleName} <code>${amount} ${token}</code>
   }
 
   /**
+   * Get date filter for a time period
+   * @param {string} period - 'week', 'month', 'year', or 'all'
+   * @returns {Date|null} Start date for filter, null for 'all'
+   */
+  getDateFilterFromPeriod(period) {
+    const now = new Date();
+    switch (period) {
+      case "week":
+        return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      case "month":
+        return new Date(now.getFullYear(), now.getMonth(), 1);
+      case "year":
+        return new Date(now.getFullYear(), 0, 1);
+      case "all":
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * Get leaderboard stats filtered by time period
+   * @param {string} period - 'week', 'month', 'year', or 'all'
+   */
+  async getLeaderboardByPeriod(period = "all") {
+    const Escrow = require("../models/Escrow");
+    const startDate = this.getDateFilterFromPeriod(period);
+
+    // Build date filter for completedAt
+    const dateFilter = startDate ? { completedAt: { $gte: startDate } } : {};
+
+    // Get top traders by volume for this period
+    const topTradersAgg = await Escrow.aggregate([
+      { $match: { status: "completed", ...dateFilter } },
+      {
+        $facet: {
+          buyers: [
+            {
+              $group: {
+                _id: "$buyerId",
+                username: { $first: "$buyerUsername" },
+                volume: { $sum: "$quantity" },
+              },
+            },
+            { $sort: { volume: -1 } },
+            { $limit: 5 },
+          ],
+          sellers: [
+            {
+              $group: {
+                _id: "$sellerId",
+                username: { $first: "$sellerUsername" },
+                volume: { $sum: "$quantity" },
+              },
+            },
+            { $sort: { volume: -1 } },
+            { $limit: 5 },
+          ],
+          overall: [
+            {
+              $project: {
+                participants: [
+                  {
+                    id: "$buyerId",
+                    username: "$buyerUsername",
+                    amount: "$quantity",
+                  },
+                  {
+                    id: "$sellerId",
+                    username: "$sellerUsername",
+                    amount: "$quantity",
+                  },
+                ],
+              },
+            },
+            { $unwind: "$participants" },
+            {
+              $group: {
+                _id: "$participants.id",
+                username: { $first: "$participants.username" },
+                volume: { $sum: "$participants.amount" },
+              },
+            },
+            { $sort: { volume: -1 } },
+            { $limit: 5 },
+          ],
+          stats: [
+            {
+              $group: {
+                _id: null,
+                totalDeals: { $sum: 1 },
+                totalVolume: { $sum: "$quantity" },
+              },
+            },
+          ],
+        },
+      },
+    ]);
+
+    const result = topTradersAgg[0] || {
+      buyers: [],
+      sellers: [],
+      overall: [],
+      stats: [],
+    };
+    const stats = result.stats[0] || { totalDeals: 0, totalVolume: 0 };
+
+    return {
+      topBuyers: result.buyers.map((u) => ({
+        telegramId: u._id,
+        username: u.username,
+        volume: u.volume,
+      })),
+      topSellers: result.sellers.map((u) => ({
+        telegramId: u._id,
+        username: u.username,
+        volume: u.volume,
+      })),
+      topOverall: result.overall.map((u) => ({
+        telegramId: u._id,
+        username: u.username,
+        volume: u.volume,
+      })),
+      totalDeals: stats.totalDeals,
+      totalVolume: stats.totalVolume,
+      period,
+    };
+  }
+
+  /**
+   * Format leaderboard with period filter
+   */
+  formatLeaderboardWithPeriod(data) {
+    const formatCurrency = (val) =>
+      Number(val || 0).toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+
+    const periodLabels = {
+      week: "📅 This Week",
+      month: "📆 This Month",
+      year: "📊 This Year",
+      all: "🌍 All Time",
+    };
+
+    const periodLabel = periodLabels[data.period] || "All Time";
+    const medals = ["🥇", "🥈", "🥉", "🏅", "🏅"];
+    const formatUser = (u) =>
+      u.username ? `@${u.username}` : `User ${u.telegramId || "?"}`;
+
+    let msg = `<b>${periodLabel} LEADERBOARD</b>\n\n`;
+    msg += `📊 <b>Total:</b> ${data.totalDeals} trades | ${formatCurrency(
+      data.totalVolume,
+    )} USDT\n\n`;
+
+    msg += `<b>🏆 TOP TRADERS</b>\n`;
+    if (data.topOverall.length === 0) {
+      msg += `<i>No trades in this period.</i>\n`;
+    } else {
+      data.topOverall.forEach((u, i) => {
+        msg += `${medals[i] || "🏅"} #${i + 1} ${formatUser(
+          u,
+        )} — ${formatCurrency(u.volume)} USDT\n`;
+      });
+    }
+
+    return msg;
+  }
+
+  /**
    * Get high level stats for main leaderboard
    */
   async getHighLevelStats() {
@@ -319,7 +489,7 @@ ${roleIcon} ${roleName} <code>${amount} ${token}</code>
 
     // Global Stats
     const normalizedGlobalVolume = this.normalizeAmount(
-      globalStats.totalVolume
+      globalStats.totalVolume,
     );
     msg += `<b>TOTAL:</b> ${globalStats.totalDeals}\n`;
     msg += `<b>VOLUME:</b> ${formatKVolume(normalizedGlobalVolume)} Usdt\n\n`;
@@ -491,7 +661,7 @@ ${roleIcon} ${roleName} <code>${amount} ${token}</code>
             : `User ${sellerId}`,
         },
       },
-      { upsert: true }
+      { upsert: true },
     );
 
     await User.findOneAndUpdate(
@@ -520,7 +690,7 @@ ${roleIcon} ${roleName} <code>${amount} ${token}</code>
             : `User ${buyerId}`,
         },
       },
-      { upsert: true }
+      { upsert: true },
     );
   }
 
@@ -555,7 +725,7 @@ ${roleIcon} ${roleName} <code>${amount} ${token}</code>
           lastActive: new Date(),
         },
       },
-      { upsert: true }
+      { upsert: true },
     );
   }
 }

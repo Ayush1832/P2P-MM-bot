@@ -536,6 +536,7 @@ module.exports = async (ctx) => {
             reply_markup: {
               inline_keyboard: [
                 [{ text: "BSC", callback_data: "step2_select_chain_BSC" }],
+                [{ text: "TRON", callback_data: "step2_select_chain_TRON" }],
               ],
             },
           },
@@ -2105,18 +2106,17 @@ Once you’ve sent the amount, tap the button below.`;
         }
       }
 
-      // Send (gross - networkFee - serviceFee) to contract
+      // Fee calculation: fee% on gross amount first, then network fee
       const networkFee = updatedEscrow.networkFee || 0;
       const feeRateVal =
         typeof updatedEscrow.feeRate === "number"
           ? updatedEscrow.feeRate
           : 0.75;
 
-      const amountToContract = releaseAmount - networkFee;
-
-      // Calculate Service Fee off-chain
-      const serviceFee = (amountToContract * feeRateVal) / 100;
-      const netAmount = amountToContract - serviceFee;
+      // Calculate service fee on FULL gross amount (fee% first)
+      const serviceFee = (releaseAmount * feeRateVal) / 100;
+      // Then deduct network fee: released = deposited - serviceFee - networkFee
+      const netAmount = releaseAmount - serviceFee - networkFee;
 
       if (netAmount <= 0) {
         throw new Error(
@@ -2736,18 +2736,17 @@ ${approvalNote}`;
         }
 
         // Fee Calculation (Off-chain)
+        // New formula: fee% on gross amount first, then network fee
         const feeRateVal = updatedEscrow.feeRate;
         const networkFee = updatedEscrow.networkFee;
         const grossReleaseAmount = releaseAmount;
 
-        // Amount subject to fee (after network fee)
-        const amountToContract = grossReleaseAmount - networkFee;
+        // Calculate service fee on FULL gross amount (fee% first)
+        const serviceFee = (grossReleaseAmount * feeRateVal) / 100;
 
-        // Calculate service fee
-        const serviceFeeOnNet = (amountToContract * feeRateVal) / 100;
-
-        // This is what user will ACTUALLY receive (Net Amount)
-        const actualAmountToUser = amountToContract - serviceFeeOnNet;
+        // Then deduct network fee
+        // Formula: released = deposited - serviceFee - networkFee
+        const actualAmountToUser = grossReleaseAmount - serviceFee - networkFee;
 
         if (actualAmountToUser <= 0) {
           console.warn(
@@ -2906,6 +2905,36 @@ ${approvalNote}`;
 🔗 <b>Release TX Link:</b> ${linkLine}
 
 Thank you for using our safe escrow system.`;
+
+            // Send tip message before close deal button
+            const buyerTag = reloadedEscrow.buyerUsername
+              ? `@${reloadedEscrow.buyerUsername}`
+              : `User ${reloadedEscrow.buyerId}`;
+            const sellerTag = reloadedEscrow.sellerUsername
+              ? `@${reloadedEscrow.sellerUsername}`
+              : `User ${reloadedEscrow.sellerId}`;
+            const depositAddress = reloadedEscrow.depositAddress || "N/A";
+            const chainName = (reloadedEscrow.chain || "BSC").toUpperCase();
+
+            const tipMessage = `💝 <b>Enjoyed our service?</b>
+
+If you liked this service and want to tip the bot, you can send your tip to:
+<code>${depositAddress}</code>
+(${chainName} Network)
+
+Thank you ${buyerTag} & ${sellerTag} for using our service! 🙏`;
+
+            try {
+              await ctx.telegram.sendMessage(
+                reloadedEscrow.groupId,
+                tipMessage,
+                {
+                  parse_mode: "HTML",
+                },
+              );
+            } catch (tipError) {
+              console.error("Error sending tip message:", tipError);
+            }
 
             const closeTradeKeyboard = {
               inline_keyboard: [
@@ -4338,12 +4367,10 @@ Trade completed successfully.`;
         const escrowFee = (actualAmount * escrowFeePercent) / 100;
         const networkFee = escrow.networkFee;
 
-        // Send (gross - networkFee) to contract, contract will deduct service fee
-        const amountToContract = actualAmount - networkFee;
-
-        // Calculate what user will ACTUALLY receive after contract deducts service fee
-        const serviceFeeOnNet = (amountToContract * escrowFeePercent) / 100;
-        const actualAmountToUser = amountToContract - serviceFeeOnNet;
+        // Fee calculation: fee% on gross amount first, then network fee
+        // Formula: released = deposited - serviceFee - networkFee
+        const serviceFee = (actualAmount * escrowFeePercent) / 100;
+        const actualAmountToUser = actualAmount - serviceFee - networkFee;
 
         if (actualAmountToUser <= 0) {
           return ctx.reply(
@@ -4750,6 +4777,270 @@ Approved By: ${
       );
       await safeAnswerCbQuery(ctx);
       return;
+    } else if (callbackData.startsWith("leaderboard_period_")) {
+      // Handle time-period filtered leaderboards
+      const period = callbackData.replace("leaderboard_period_", "");
+      const UserStatsService = require("../services/UserStatsService");
+
+      const data = await UserStatsService.getLeaderboardByPeriod(period);
+      const message = UserStatsService.formatLeaderboardWithPeriod(data);
+
+      await ctx.editMessageText(message, {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: period === "week" ? "✅ Week" : "📅 Week",
+                callback_data: "leaderboard_period_week",
+              },
+              {
+                text: period === "month" ? "✅ Month" : "📆 Month",
+                callback_data: "leaderboard_period_month",
+              },
+              {
+                text: period === "year" ? "✅ Year" : "📊 Year",
+                callback_data: "leaderboard_period_year",
+              },
+            ],
+            [{ text: "🌍 All Time", callback_data: "leaderboard_main" }],
+          ],
+        },
+      });
+      await safeAnswerCbQuery(ctx);
+      return;
+    } else if (callbackData.startsWith("tron_verify_received_confirm_")) {
+      const escrowId = callbackData.replace(
+        "tron_verify_received_confirm_",
+        "",
+      );
+      const escrow = await Escrow.findOne({ escrowId });
+      if (!escrow) return safeAnswerCbQuery(ctx, "❌ Escrow not found.");
+      if (!config.getAllAdminIds().includes(String(userId))) {
+        return safeAnswerCbQuery(ctx, "❌ Admin only.");
+      }
+
+      await safeAnswerCbQuery(ctx, "Confirmed funds received.");
+
+      // Process the deposit
+      const txHash = escrow.tronPendingTxHash;
+      const amount = escrow.tronPendingAmount;
+      const expectedAmount = escrow.quantity;
+      const tolerance = 0.01;
+
+      // Update Escrow
+      escrow.tronManualVerificationPending = false;
+
+      const currentAccumulated = escrow.accumulatedDepositAmount;
+      const newAccumulated = currentAccumulated + amount;
+
+      escrow.accumulatedDepositAmount = newAccumulated;
+
+      // Update transaction hash fields
+      if (!escrow.transactionHash) {
+        escrow.transactionHash = txHash;
+      } else {
+        if (!escrow.partialTransactionHashes) {
+          escrow.partialTransactionHashes = [];
+        }
+        escrow.partialTransactionHashes.push(txHash);
+      }
+
+      escrow.depositAmount = newAccumulated;
+
+      // Check if fully funded
+      if (newAccumulated >= expectedAmount - tolerance) {
+        escrow.confirmedAmount = newAccumulated;
+        if (
+          ["draft", "awaiting_details", "awaiting_deposit"].includes(
+            escrow.status,
+          )
+        ) {
+          escrow.status = "deposited";
+        }
+      }
+
+      await escrow.save();
+
+      // Delete the verification message
+      try {
+        await ctx.deleteMessage();
+      } catch (e) {}
+
+      // Send confirmation to group (Similar to auto-deposit confirmation)
+      const overDelivered =
+        expectedAmount > 0 && newAccumulated - expectedAmount > tolerance;
+      const totalTxCount =
+        1 +
+        (escrow.partialTransactionHashes
+          ? escrow.partialTransactionHashes.length
+          : 0);
+      const txHashShort = txHash.substring(0, 10) + "...";
+
+      const statusLine = overDelivered
+        ? `🟢 Extra ${escrow.token} received (expected ${expectedAmount.toFixed(
+            2,
+          )}, got ${newAccumulated.toFixed(2)})`
+        : `🟢 Exact ${escrow.token} found`;
+
+      let confirmedTxText = `<b>P2P MM Bot 🤖</b>
+
+${statusLine}
+
+<b>Total Amount:</b> ${newAccumulated.toFixed(2)} ${escrow.token}
+<b>Transactions:</b> ${totalTxCount} transaction(s)
+<b>Main Tx:</b> <code>${txHashShort}</code>
+<i>(Manually verified by Admin)</i>`;
+
+      if (overDelivered) {
+        confirmedTxText += `\n<b>Original Deal Amount:</b> ${expectedAmount.toFixed(
+          2,
+        )} ${escrow.token}`;
+      }
+
+      await ctx.telegram.sendPhoto(escrow.groupId, images.DEPOSIT_FOUND, {
+        caption: confirmedTxText,
+        parse_mode: "HTML",
+      });
+
+      // Buyer instructions
+      if (escrow.buyerId) {
+        const buyerInstruction = `✅ Payment Received!
+
+Use /release After Fund Transfer to Seller
+
+⚠️ Please note:
+• Don't share payment details on private chat
+• Please share all deals in group`;
+
+        await ctx.telegram.sendMessage(escrow.groupId, buyerInstruction);
+      }
+    } else if (callbackData.startsWith("tron_verify_received_")) {
+      // First click - Ask for confirmation
+      const escrowId = callbackData.replace("tron_verify_received_", "");
+      if (!config.getAllAdminIds().includes(String(userId))) {
+        return safeAnswerCbQuery(ctx, "❌ Admin only.");
+      }
+      await safeAnswerCbQuery(ctx, "Please confirm.");
+
+      await ctx.editMessageText(
+        `⚠️ <b>CONFIRM FUNDS RECEIVED?</b>\n\nAre you sure you have verified the funds in the wallet?\nThis action cannot be undone.`,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: "✅ YES, CONFIRM",
+                  callback_data: `tron_verify_received_confirm_${escrowId}`,
+                },
+              ],
+              [
+                {
+                  text: "🔙 Cancel",
+                  callback_data: `tron_verify_cancel_${escrowId}`,
+                },
+              ],
+            ],
+          },
+        },
+      );
+    } else if (callbackData.startsWith("tron_verify_not_received_confirm_")) {
+      const escrowId = callbackData.replace(
+        "tron_verify_not_received_confirm_",
+        "",
+      );
+      const escrow = await Escrow.findOne({ escrowId });
+      if (!escrow) return safeAnswerCbQuery(ctx, "❌ Escrow not found.");
+      if (!config.getAllAdminIds().includes(String(userId))) {
+        return safeAnswerCbQuery(ctx, "❌ Admin only.");
+      }
+
+      await safeAnswerCbQuery(ctx, "Marked as not received.");
+
+      // Reset pending verification
+      escrow.tronManualVerificationPending = false;
+      escrow.tronPendingTxHash = undefined;
+      escrow.tronPendingAmount = undefined;
+      await escrow.save();
+
+      try {
+        await ctx.deleteMessage();
+      } catch (e) {}
+
+      await ctx.telegram.sendMessage(
+        escrow.groupId,
+        `❌ <b>Deposit Verification Failed</b>\n\nThe admin could not assist the funds for the provided transaction hash.\nPlease check the hash and try again.`,
+      );
+    } else if (callbackData.startsWith("tron_verify_not_received_")) {
+      // First click - Ask for confirmation
+      const escrowId = callbackData.replace("tron_verify_not_received_", "");
+      if (!config.getAllAdminIds().includes(String(userId))) {
+        return safeAnswerCbQuery(ctx, "❌ Admin only.");
+      }
+
+      await safeAnswerCbQuery(ctx, "Please confirm.");
+
+      await ctx.editMessageText(
+        `⚠️ <b>CONFIRM FUNDS NOT RECEIVED?</b>\n\nAre you sure? This will reject the user's deposit claim.`,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: "❌ YES, REJECT",
+                  callback_data: `tron_verify_not_received_confirm_${escrowId}`,
+                },
+              ],
+              [
+                {
+                  text: "🔙 Cancel",
+                  callback_data: `tron_verify_cancel_${escrowId}`,
+                },
+              ],
+            ],
+          },
+        },
+      );
+    } else if (callbackData.startsWith("tron_verify_cancel_")) {
+      // Restore original message
+      const escrowId = callbackData.replace("tron_verify_cancel_", "");
+      const escrow = await Escrow.findOne({ escrowId });
+      if (!escrow) return safeAnswerCbQuery(ctx, "❌ Escrow not found.");
+
+      // Re-render the original verification message options
+      // We can't perfectly restore the original text if we don't store it,
+      // but we can reconstruct it from the escrow data.
+
+      const adminTag = config.ADMIN_USERNAME2
+        ? `@${config.ADMIN_USERNAME2}`
+        : "Admin";
+
+      await ctx.editMessageText(
+        `⚠️ <b>TRON DEPOSIT VERIFICATION REQUIRED</b>\n\n` +
+          `User submitted hash: <code>${escrow.tronPendingTxHash}</code>\n` +
+          `Amount detected: <b>${escrow.tronPendingAmount} ${escrow.token}</b>\n` +
+          `Expected: <b>${escrow.quantity} ${escrow.token}</b>\n\n` +
+          `${adminTag}, please verify funds are in the wallet and click below:`,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: "✅ Funds Received",
+                  callback_data: `tron_verify_received_${escrow.escrowId}`,
+                },
+                {
+                  text: "❌ Not Received",
+                  callback_data: `tron_verify_not_received_${escrow.escrowId}`,
+                },
+              ],
+            ],
+          },
+        },
+      );
     }
   } catch (error) {
     if (
