@@ -363,7 +363,6 @@ class EscrowBot {
         (ctx.chat.type === "group" || ctx.chat.type === "supergroup")
       ) {
         const chatId = String(ctx.chat.id);
-        console.log(`[DEBUG] Chat ID: ${chatId} | Title: ${ctx.chat.title}`);
 
         (async () => {
           try {
