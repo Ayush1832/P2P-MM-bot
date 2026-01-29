@@ -53,7 +53,6 @@ async function main() {
       token: "USDT",
       network: "BSC",
       address: address,
-      feePercent: 0, // Fee logic removed from contract, but schema requires field
       status: "deployed",
     });
 
@@ -78,7 +77,6 @@ async function main() {
       token: "USDC",
       network: "BSC",
       address: address,
-      feePercent: 0,
       status: "deployed",
     });
 

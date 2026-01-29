@@ -11,9 +11,9 @@ module.exports = {
   },
 
   SERVICE_FEES: {
-    NO_BIO_TAG: 0.75,
-    SELLER_ONLY_TAG: 0.5,
-    BOTH_TAGS: 0.25,
+    NO_BIO_TAG: 0.5,
+    SELLER_ONLY_TAG: 0.25,
+    BOTH_TAGS: 0,
   },
 
   getNetworkFee(chain, hasBioTag) {

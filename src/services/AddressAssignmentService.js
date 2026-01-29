@@ -5,10 +5,6 @@ const Escrow = require("../models/Escrow");
 const GroupPool = require("../models/GroupPool");
 
 class AddressAssignmentService {
-  /**
-   * Normalize chain name to network name
-   * Maps: BNB -> BSC, ETHEREUM -> ETH, etc.
-   */
   normalizeChainToNetwork(chain) {
     if (!chain) return "BSC";
     const upper = chain.toUpperCase();
@@ -18,14 +14,7 @@ class AddressAssignmentService {
     return upper;
   }
 
-  async assignDepositAddress(
-    escrowId,
-    token,
-    network,
-    amount,
-    feePercent = null,
-    groupId = null,
-  ) {
+  async assignDepositAddress(escrowId, token, network, amount, groupId = null) {
     try {
       const normalizedToken = (token || "").toUpperCase();
       let normalizedNetwork = network
@@ -49,22 +38,16 @@ class AddressAssignmentService {
         try {
           const group = await GroupPool.findOne({ groupId });
           if (group) {
-            groupFeePercent = group.feePercent || 0.75; // Default to 0.75% if not set
-
-            // Logic to find contract in the map
-            // New structure: contracts is Map<String, { address, network }>
-            // Keys: "USDT", "USDC", "USDT_TRON" (likely)
+            groupFeePercent = group.feePercent;
 
             let assignedContract = null;
             if (group.contracts) {
-              const key1 = normalizedToken; // e.g. USDT
-              const key2 = `${normalizedToken}_${normalizedNetwork}`; // e.g. USDT_BSC or USDT_TRON
+              const key1 = normalizedToken;
+              const key2 = `${normalizedToken}_${normalizedNetwork}`;
 
-              // Try specific key first (e.g. USDT_TRON)
               if (group.contracts.get(key2)) {
                 assignedContract = group.contracts.get(key2);
               } else if (group.contracts.get(key1)) {
-                // If found by generic token name, check network match to be safe
                 const c = group.contracts.get(key1);
                 if (c.network === normalizedNetwork) {
                   assignedContract = c;
@@ -79,8 +62,6 @@ class AddressAssignmentService {
                 sharedWithAmount: null,
               };
             }
-            // NOTE: Legacy `group.contractAddress` field has been removed from schema.
-            // All contracts are now stored in the `contracts` Map.
           }
         } catch (groupError) {
           console.error(
@@ -90,17 +71,7 @@ class AddressAssignmentService {
         }
       }
 
-      // Use group's fee if available, otherwise use passed parameter
-      const normalizedFeePercent =
-        groupFeePercent !== null
-          ? groupFeePercent
-          : feePercent !== null
-          ? Number(feePercent)
-          : 0.75;
-
-      // Query Contract collection with the correct fee
       let contract = null;
-      // Removed: Legacy check by groupId (groupId field removed from Contract schema)
 
       if (!contract) {
         contract = await Contract.findOne({

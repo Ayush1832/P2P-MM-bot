@@ -30,11 +30,11 @@ async function setRoomFees() {
       let feePercent;
 
       if (roomNumber >= 1 && roomNumber <= 10) {
-        feePercent = 0.25;
+        feePercent = 0;
       } else if (roomNumber >= 11 && roomNumber <= 15) {
-        feePercent = 0.5;
+        feePercent = 0.25;
       } else if (roomNumber >= 16 && roomNumber <= 20) {
-        feePercent = 0.75;
+        feePercent = 0.5;
       } else {
         console.log(
           `Skipping "${title}" - room number ${roomNumber} out of range 1-20`,

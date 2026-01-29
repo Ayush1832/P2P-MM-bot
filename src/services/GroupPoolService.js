@@ -1,12 +1,13 @@
 const GroupPool = require("../models/GroupPool");
 const config = require("../../config");
+const feeConfig = require("../config/feeConfig");
 const Contract = require("../models/Contract");
 
 // Tier to feePercent mapping
 const TIER_FEE_MAP = {
-  both_tags: 0.25,
-  one_tag: 0.5,
-  no_tag: 0.75,
+  both_tags: feeConfig.SERVICE_FEES.BOTH_TAGS,
+  one_tag: feeConfig.SERVICE_FEES.SELLER_ONLY_TAG,
+  no_tag: feeConfig.SERVICE_FEES.NO_BIO_TAG,
 };
 
 class GroupPoolService {
@@ -18,7 +19,6 @@ class GroupPoolService {
    */
   async assignGroup(escrowId, telegram = null, tier = "no_tag") {
     try {
-      // Determine required feePercent based on tier
       const requiredFee = TIER_FEE_MAP[tier];
       if (requiredFee === undefined) {
         throw new Error(
@@ -26,7 +26,6 @@ class GroupPoolService {
         );
       }
 
-      // Query for available groups with the matching pre-set feePercent
       const query = {
         status: "available",
         feePercent: requiredFee,
@@ -38,7 +37,6 @@ class GroupPoolService {
         assignedAt: new Date(),
       };
 
-      // Find and update atomically (do NOT modify feePercent - it's pre-set in DB)
       const updatedGroup = await GroupPool.findOneAndUpdate(
         query,
         { $set: updateData },

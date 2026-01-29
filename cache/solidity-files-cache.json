@@ -1,9 +1,9 @@
 {
   "_format": "hh-sol-cache-2",
   "files": {
-    "C:\\Users\\LENOVO\\Desktop\\tg-escrow-bot\\contracts\\EscrowVault.sol": {
-      "lastModificationDate": 1767467994433,
-      "contentHash": "158da4a7735a210706e3446606e09b0d",
+    "C:\\Users\\LENOVO\\Desktop\\P2P-MM-bot\\contracts\\EscrowVault.sol": {
+      "lastModificationDate": 1769517549633,
+      "contentHash": "84785f79e1b5b320a4211734819c07b4",
       "sourceName": "contracts/EscrowVault.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -36,42 +36,6 @@
       "artifacts": [
         "EscrowVault",
         "IERC20"
-      ]
-    },
-    "C:\\Users\\LENOVO\\Desktop\\tg-escrow-bot\\contracts\\MockUSDT.sol": {
-      "lastModificationDate": 1759830050764,
-      "contentHash": "d76dcbb3b5da68c735d75b7cc0d5f962",
-      "sourceName": "contracts/MockUSDT.sol",
-      "solcConfig": {
-        "version": "0.8.24",
-        "settings": {
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "evmVersion": "paris",
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [],
-      "versionPragmas": [
-        "^0.8.24"
-      ],
-      "artifacts": [
-        "MockUSDT"
       ]
     }
   }

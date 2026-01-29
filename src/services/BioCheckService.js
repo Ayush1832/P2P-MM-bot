@@ -19,48 +19,46 @@ class BioCheckService {
       const hasRoom = bio.toLowerCase().includes("@room");
 
       console.log(
-        `Bio check for user ${userId}: ${hasRoom ? "HAS" : "NO"} @room`
+        `Bio check for user ${userId}: ${hasRoom ? "HAS" : "NO"} @room`,
       );
       return hasRoom;
     } catch (error) {
       console.error(`Error checking bio for user ${userId}:`, error.message);
-      // Default to false if error (safer to charge higher fee)
       return false;
     }
   }
 
   /**
-   * Determine fee percent based on buyer and seller bios
+   * Determine fee tier based on buyer and seller bios
    * @param {number} buyerId - Buyer's Telegram user ID
    * @param {number} sellerId - Seller's Telegram user ID
-   * @returns {Promise<number>} - Fee percent (0.25, 0.50, or 0.75)
+   * @returns {Promise<string>} - Tier ('both_tags', 'one_tag', 'no_tag')
    */
-  async determineFeePercent(buyerId, sellerId) {
+  async determineTier(buyerId, sellerId) {
     try {
       const buyerHasRoom = await this.checkUserBio(buyerId);
       const sellerHasRoom = await this.checkUserBio(sellerId);
 
       const count = (buyerHasRoom ? 1 : 0) + (sellerHasRoom ? 1 : 0);
 
-      let feePercent;
+      let tier;
       if (count === 0) {
-        feePercent = 0.75; // No @room in bio
+        tier = "no_tag";
       } else if (count === 1) {
-        feePercent = 0.5; // 1 user has @room
+        tier = "one_tag";
       } else {
-        feePercent = 0.25; // Both have @room
+        tier = "both_tags";
       }
 
       console.log(
-        `Fee determination: Buyer ${buyerHasRoom ? "HAS" : "NO"} @room, ` +
-          `Seller ${sellerHasRoom ? "HAS" : "NO"} @room → ${feePercent}% fee`
+        `Tier determination: Buyer ${buyerHasRoom ? "HAS" : "NO"} @room, ` +
+          `Seller ${sellerHasRoom ? "HAS" : "NO"} @room → ${tier}`,
       );
 
-      return feePercent;
+      return tier;
     } catch (error) {
-      console.error("Error determining fee percent:", error);
-      // Default to highest fee if error
-      return 0.75;
+      console.error("Error determining tier:", error);
+      return "no_tag";
     }
   }
 }

@@ -329,12 +329,10 @@ const escrowSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
-  // Fee rate used for calculation (e.g. 0.25, 0.5, 0.75)
   feeRate: {
     type: Number,
     required: false,
   },
-  // Specific contract address used for this escrow
   contractAddress: {
     type: String,
     required: false,
