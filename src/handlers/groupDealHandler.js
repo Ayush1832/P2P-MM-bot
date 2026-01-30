@@ -101,7 +101,6 @@ module.exports = async (ctx) => {
             if (admin.user && admin.user.username) {
               const adminUsername = admin.user.username.toLowerCase();
               if (adminUsername === normalizedHandle) {
-                // Found the user in group administrators
                 counterpartyUser = {
                   id: Number(admin.user.id),
                   username: admin.user.username || null,
@@ -114,17 +113,12 @@ module.exports = async (ctx) => {
             }
           }
         } catch (adminError) {
-          // Can't get administrators (bot might not be admin or group doesn't allow it)
-          // Silently continue to other methods
         }
       }
 
-      // Method 3: If still not found, try to find the user in our database
-      // (if they've done trades before, we'll have their user ID)
       if (!counterpartyUser && (!chatInfo || chatInfo.type !== "private")) {
         try {
           const Escrow = require("../models/Escrow");
-          // Search for the user in recent escrows by username
           const escrowWithUser = await Escrow.findOne({
             $or: [
               {
@@ -147,7 +141,6 @@ module.exports = async (ctx) => {
           }).sort({ createdAt: -1 });
 
           if (escrowWithUser) {
-            // Found the user in database, get their info
             const userId =
               escrowWithUser.buyerUsername?.toLowerCase() ===
               handle.toLowerCase()
@@ -160,7 +153,6 @@ module.exports = async (ctx) => {
                 : escrowWithUser.sellerUsername;
 
             if (userId) {
-              // Try to get chat member info from the group (preferred method)
               try {
                 const memberInfo = await ctx.telegram.getChatMember(
                   chatId,
@@ -176,9 +168,6 @@ module.exports = async (ctx) => {
                   };
                 }
               } catch (memberError) {
-                // User not in group or can't get member info
-                // Fallback: Use database info to create user object
-                // This allows the deal to proceed even if we can't verify group membership
                 counterpartyUser = {
                   id: Number(userId),
                   username: userUsername || handle,
@@ -194,21 +183,15 @@ module.exports = async (ctx) => {
         }
       }
 
-      // Method 4: If we still don't have the user, try getChat one more time
-      // (usually won't work if Method 1 failed, but worth a try)
       if (!counterpartyUser && (!chatInfo || chatInfo.type !== "private")) {
         try {
           chatInfo = await ctx.telegram.getChat(`@${handle}`);
         } catch (retryError) {
-          // getChat failed again - this is expected for users who haven't interacted with bot
-          // Silently continue - don't log as error
           chatInfo = null;
         }
       }
 
-      // If we got chatInfo, validate and use it
       if (!counterpartyUser && chatInfo) {
-        // getChat can return different types, we need a user
         if (chatInfo.type !== "private") {
           try {
             await ctx.deleteMessage().catch(() => {});
@@ -237,15 +220,9 @@ module.exports = async (ctx) => {
         };
       }
 
-      // Method 5: If we still don't have the user ID but have a username,
-      // allow proceeding with just the username. The join request handler will
-      // match them by username when they try to join.
-      // This handles cases where the user is in the group but we can't get their ID yet.
       if (!counterpartyUser && handle) {
-        // Create a minimal user object with just the username
-        // The join request handler will match by username and update with the actual ID
         counterpartyUser = {
-          id: null, // Will be set when user joins via join request
+          id: null,
           username: handle,
           first_name: null,
           last_name: null,
@@ -266,7 +243,6 @@ module.exports = async (ctx) => {
             .catch(() => {});
         }, 5000);
       } catch (e) {
-        // Ignore errors
       }
       return;
     }
@@ -278,7 +254,6 @@ module.exports = async (ctx) => {
     const counterpartyId = counterpartyUser.id;
     const counterpartyUsername = counterpartyUser.username || null;
 
-    // Check if user is trying to deal with themselves (only if we have both IDs)
     if (
       counterpartyId !== null &&
       counterpartyId !== undefined &&
@@ -287,15 +262,10 @@ module.exports = async (ctx) => {
       return ctx.reply("❌ You cannot start a deal with yourself.");
     }
 
-    // Check user bios for "@room" to determine room tier
     let initiatorHasTag = false;
     let counterpartyHasTag = false;
 
-    // If config dictates 0% fee, force it and skip bio checks
-    // Dynamic Fee Logic: Check user bios for "@room"
-    // Removed legacy check for config.ESCROW_FEE_PERCENT === 0 to enable dynamic fees.
     try {
-      // Helper function to check bio with retry logic
       const checkBio = async (userId) => {
         const maxRetries = 3;
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -308,7 +278,6 @@ module.exports = async (ctx) => {
               `Error checking bio for ${userId} (Attempt ${attempt}/${maxRetries}):`,
               e.message,
             );
-            // Don't retry if user not found (probably invalid ID or deleted account)
             if (
               e.response &&
               e.response.error_code === 400 &&
@@ -316,7 +285,6 @@ module.exports = async (ctx) => {
             ) {
               return false;
             }
-            // Wait 1s before retry
             if (attempt < maxRetries) {
               await new Promise((resolve) => setTimeout(resolve, 1000));
             }
@@ -330,14 +298,11 @@ module.exports = async (ctx) => {
         ? await checkBio(counterpartyId)
         : false;
 
-      // Determine tier based on bio results (fee is pre-set in DB, not calculated here)
-      // feePercent will be read from the assigned group after assignment
     } catch (bioError) {
       console.error("Error checking bios:", bioError);
-      // Fallback to no_tag tier if bio check fails
     }
 
-    // Determine tier for room assignment
+
     let tier = "no_tag";
     if (initiatorHasTag && counterpartyHasTag) {
       tier = "both_tags";
@@ -345,14 +310,9 @@ module.exports = async (ctx) => {
       tier = "one_tag";
     }
 
-    // Network fee will be set based on chain selection (BSC or TRON) and bio status
-    // For now, use BSC default (0.2). This will be updated when user selects chain.
     const hasBioTag = initiatorHasTag || counterpartyHasTag;
     const networkFee = feeConfig.getNetworkFee("BSC", hasBioTag);
 
-    // Create a new managed-room escrow and assign a pool group
-    // Generate sequential ID
-    // Start at 10000000, so first is 10000001
     const counter = await Counter.findByIdAndUpdate(
       { _id: "escrowId" },
       { $inc: { seq: 1 } },
@@ -360,9 +320,6 @@ module.exports = async (ctx) => {
     );
     const escrowId = `P2PMMX${counter.seq}`;
 
-    // Retry logic for assigning group and generating invite link
-    // This handles cases where a group in the pool is invalid (bot kicked, etc.)
-    // assignGroup picks a group, but generateInviteLink might fail if bot isn't admin/member
     let assignedGroup = null;
     let inviteLink = null;
     let assignmentError = null;
@@ -372,12 +329,9 @@ module.exports = async (ctx) => {
         assignedGroup = await GroupPoolService.assignGroup(
           escrowId,
           ctx.telegram,
-          tier, // Pass tier instead of feePercent
+          tier,
         );
 
-        // Always enforce join-request approval with a freshly generated link
-        // If this fails (e.g. group not found/archived), it throws an error
-        // causing us to catch it and retry with a new group
         inviteLink = await GroupPoolService.refreshInviteLink(
           assignedGroup.groupId,
           ctx.telegram,
@@ -391,7 +345,6 @@ module.exports = async (ctx) => {
           );
         }
 
-        // If we got here, everything worked
         break;
       } catch (err) {
         assignmentError = err;
@@ -411,8 +364,6 @@ module.exports = async (ctx) => {
       );
     }
 
-    // Persist escrow with allowed usernames and user IDs
-    // Note: assignedFromPool: true ensures this group will be recycled back to pool after completion
     const participants = [
       { id: initiatorId, username: initiatorUsername },
       { id: counterpartyId, username: counterpartyUsername },
@@ -422,36 +373,29 @@ module.exports = async (ctx) => {
       escrowId,
       creatorId: initiatorId,
       creatorUsername: initiatorUsername,
-      groupId: assignedGroup.groupId, // This is a pool group assigned from GroupPoolService
-      assignedFromPool: true, // Mark as pool group for proper recycling
+      groupId: assignedGroup.groupId,
+      assignedFromPool: true,
       status: "draft",
-      inviteLink, // Join-request link from the pool group
+      inviteLink,
       allowedUsernames: participants.map((p) => p.username || null),
-      // Only include valid user IDs (filter out null/undefined)
-      // Users without IDs will be matched by username in joinRequestHandler
       allowedUserIds: participants
         .map((p) => (p.id !== null && p.id !== undefined ? Number(p.id) : null))
         .filter((id) => id !== null),
-      approvedUserIds: [], // Will be populated as users join via join-request approval
+      approvedUserIds: [],
       originChatId: String(chatId),
-      // Save fee details
       feeRate: assignedGroup.feePercent,
       networkFee: networkFee,
       contractAddress: null,
     });
     await newEscrow.save();
 
-    // Post the room card in the current group (showing invite link from pool group)
     const images = require("../config/images");
 
-    // Format participants with better handling for users without usernames
     const formatParticipantWithRole = (participant, role) => {
       const formatted = formatParticipant(participant, role, { html: true });
-      // If user has username, add role in parentheses. If not, the Telegram link will show their name
       if (participant && participant.username) {
         return `${formatted} (${role})`;
       }
-      // For users without username, just show the formatted link (Telegram will display their name)
       return formatted;
     };
 
@@ -634,7 +578,6 @@ module.exports = async (ctx) => {
           );
         }
 
-        // Delete the escrow
         try {
           await Escrow.deleteOne({ escrowId: currentEscrow.escrowId });
         } catch (deleteError) {
@@ -647,9 +590,8 @@ module.exports = async (ctx) => {
         console.error("Error in invite timeout handler:", error);
         inviteTimeoutMap.delete(newEscrow.escrowId);
       }
-    }, 5 * 60 * 1000); // 5 minutes
+    }, 5 * 60 * 1000);
 
-    // Store timeout reference so we can cancel it if both join
     inviteTimeoutMap.set(newEscrow.escrowId, timeoutId);
   } catch (error) {
     return ctx.reply("❌ Failed to create deal room. Please try again.");
